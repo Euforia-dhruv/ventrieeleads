@@ -68,7 +68,7 @@ services:
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin123
       - TASK_ENQUEUER_URL=http://task-enqueuer:8002
-      - CORS_ORIGINS=http://localhost,http://localhost:3000,https://ventrieeleads.qd.je
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://localhost:3000,https://ventrieeleads.qd.je}
       - LOG_LEVEL=info
       - NODE_ENV=production
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
