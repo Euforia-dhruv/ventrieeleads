@@ -1,12 +1,18 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import axios from 'axios';
+import { URL } from 'url';
 import { getPool } from '../database/connection';
 import { redisClient } from '../database/redis';
 import { logger } from '../core/logger';
 import {
   generateToken, generateRefreshToken, verifyToken, AuthRequest
 } from '../middleware/auth';
+
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost';
 
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12');
 
@@ -823,5 +829,211 @@ export async function oauthCallback(req: Request, res: Response): Promise<void> 
   } catch (error) {
     logger.error('OAuth callback error:', error);
     res.status(500).json({ success: false, message: 'OAuth authentication failed' });
+  }
+}
+
+// ── Google OAuth: Redirect to Google ────────────────────────
+export async function googleAuth(req: Request, res: Response): Promise<void> {
+  try {
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+      res.status(503).json({ success: false, message: 'Google OAuth not configured' });
+      return;
+    }
+
+    const state = crypto.randomBytes(32).toString('hex');
+    const frontendUrl = req.query.returnTo as string || FRONTEND_URL;
+
+    try {
+      await redisClient.getClient().setEx(`oauth_state:${state}`, 600, frontendUrl);
+    } catch (e) {
+      logger.warn('Redis unavailable for OAuth state, using state param only');
+    }
+
+    const callbackUrl = `${req.protocol}://${req.get('host')}/api/auth/google/callback`;
+    const params = new URLSearchParams({
+      client_id: GOOGLE_CLIENT_ID,
+      redirect_uri: callbackUrl,
+      response_type: 'code',
+      scope: 'openid email profile',
+      state,
+      access_type: 'offline',
+      prompt: 'consent',
+    });
+
+    res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+  } catch (error) {
+    logger.error('Google auth redirect error:', error);
+    res.status(500).json({ success: false, message: 'Failed to initiate Google OAuth' });
+  }
+}
+
+// ── Google OAuth: Handle Callback ───────────────────────────
+export async function googleCallback(req: Request, res: Response): Promise<void> {
+  try {
+    const { code, state, error: googleError } = req.query as {
+      code?: string;
+      state?: string;
+      error?: string;
+    };
+
+    if (googleError) {
+      logger.warn(`Google OAuth error: ${googleError}`);
+      res.redirect(`${FRONTEND_URL}/login?error=google_denied`);
+      return;
+    }
+
+    if (!code || !state) {
+      res.redirect(`${FRONTEND_URL}/login?error=missing_code`);
+      return;
+    }
+
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+      res.redirect(`${FRONTEND_URL}/login?error=google_not_configured`);
+      return;
+    }
+
+    let redirectBase = FRONTEND_URL;
+    try {
+      const stored = await redisClient.getClient().get(`oauth_state:${state}`);
+      if (stored) redirectBase = stored;
+      await redisClient.getClient().del(`oauth_state:${state}`);
+    } catch (e) {
+      logger.warn('Redis unavailable for state verification');
+    }
+
+    const callbackUrl = `${req.protocol}://${req.get('host')}/api/auth/google/callback`;
+
+    const tokenRes = await axios.post('https://oauth2.googleapis.com/token', {
+      code,
+      client_id: GOOGLE_CLIENT_ID,
+      client_secret: GOOGLE_CLIENT_SECRET,
+      redirect_uri: callbackUrl,
+      grant_type: 'authorization_code',
+    }, { timeout: 10000 });
+
+    const { access_token, refresh_token, id_token } = tokenRes.data;
+
+    let googleUserId = '';
+    let googleEmail = '';
+    let googleName = '';
+    let googleAvatar = '';
+
+    try {
+      const payload = JSON.parse(
+        Buffer.from(id_token.split('.')[1], 'base64url').toString()
+      );
+      googleUserId = payload.sub;
+      googleEmail = payload.email || '';
+      googleName = payload.name || '';
+      googleAvatar = payload.picture || '';
+    } catch {
+      const userInfoRes = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: `Bearer ${access_token}` },
+        timeout: 10000,
+      });
+      googleUserId = userInfoRes.data.id;
+      googleEmail = userInfoRes.data.email || '';
+      googleName = userInfoRes.data.name || '';
+      googleAvatar = userInfoRes.data.picture || '';
+    }
+
+    if (!googleUserId || !googleEmail) {
+      res.redirect(`${FRONTEND_URL}/login?error=google_no_email`);
+      return;
+    }
+
+    const pool = getPool();
+
+    const oauthResult = await pool.query(
+      `SELECT user_id FROM oauth_connections WHERE provider = $1 AND provider_user_id = $2`,
+      ['google', googleUserId]
+    );
+
+    let userId: string;
+
+    if (oauthResult.rows.length > 0) {
+      userId = oauthResult.rows[0].user_id;
+      await pool.query(
+        `UPDATE oauth_connections SET access_token = $1, refresh_token = $2, provider_name = $3, provider_avatar = $4, updated_at = NOW()
+         WHERE provider = $5 AND provider_user_id = $6`,
+        [access_token, refresh_token || null, googleName, googleAvatar, 'google', googleUserId]
+      );
+
+      if (googleAvatar) {
+        await pool.query('UPDATE users SET avatar_url = $1 WHERE id = $2 AND avatar_url IS NULL', [googleAvatar, userId]);
+      }
+    } else {
+      const existingUser = await pool.query(
+        'SELECT id FROM users WHERE email = $1 AND is_deleted = false',
+        [googleEmail.toLowerCase()]
+      );
+
+      if (existingUser.rows.length > 0) {
+        userId = existingUser.rows[0].id;
+      } else {
+        let slug = `google-${googleUserId.substring(0, 8)}`;
+        let finalSlug = slug;
+        let suffix = 1;
+        while (true) {
+          const existingSlug = await pool.query('SELECT id FROM workspaces WHERE slug = $1', [finalSlug]);
+          if (existingSlug.rows.length === 0) break;
+          finalSlug = `${slug}-${suffix++}`;
+        }
+
+        const workspaceResult = await pool.query(
+          `INSERT INTO workspaces (name, slug) VALUES ($1, $2) RETURNING id`,
+          [`${googleName || googleEmail.split('@')[0]}'s Workspace`, finalSlug]
+        );
+
+        const userResult = await pool.query(
+          `INSERT INTO users (email, name, hashed_password, role, workspace_id, is_active, email_verified, avatar_url)
+           VALUES ($1, $2, $3, 'owner', $4, true, true, $5) RETURNING id`,
+          [googleEmail.toLowerCase(), googleName, await bcrypt.hash(crypto.randomBytes(32).toString('hex'), BCRYPT_ROUNDS), workspaceResult.rows[0].id, googleAvatar || null]
+        );
+        userId = userResult.rows[0].id;
+
+        const ownerRole = await pool.query(`SELECT id FROM roles WHERE name = 'owner'`);
+        if (ownerRole.rows.length > 0) {
+          await pool.query(
+            `INSERT INTO user_workspace_roles (user_id, workspace_id, role_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+            [userId, workspaceResult.rows[0].id, ownerRole.rows[0].id]
+          );
+        }
+      }
+
+      await pool.query(
+        `INSERT INTO oauth_connections (user_id, provider, provider_user_id, provider_email, provider_name, provider_avatar, access_token, refresh_token)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (provider, provider_user_id) DO NOTHING`,
+        [userId, 'google', googleUserId, googleEmail, googleName, googleAvatar, access_token, refresh_token || null]
+      );
+    }
+
+    const userResult = await pool.query(
+      `SELECT id, email, name, role, workspace_id, email_verified FROM users WHERE id = $1`,
+      [userId]
+    );
+    const user = userResult.rows[0];
+
+    const tokenUser = { id: user.id, email: user.email, name: user.name, role: user.role, workspace_id: user.workspace_id, email_verified: user.email_verified };
+    const token = generateToken(tokenUser);
+    const refreshToken = generateRefreshToken(tokenUser);
+
+    const { device_type, device_name } = parseUserAgent(req.headers['user-agent']);
+    await pool.query(
+      `INSERT INTO sessions (user_id, token_hash, refresh_token_hash, user_agent, ip_address, device_name, device_type, expires_at, refresh_expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW() + INTERVAL '7 days', NOW() + INTERVAL '30 days')`,
+      [userId, hashToken(token), hashToken(refreshToken), req.headers['user-agent'], req.ip, device_name, device_type]
+    );
+
+    await pool.query(
+      'UPDATE users SET last_login_at = NOW(), login_count = login_count + 1 WHERE id = $1',
+      [userId]
+    );
+
+    const separator = redirectBase.includes('?') ? '&' : '?';
+    res.redirect(`${redirectBase}/auth/callback${separator}token=${token}&refreshToken=${refreshToken}`);
+  } catch (error: any) {
+    logger.error('Google OAuth callback error:', error?.response?.data || error.message || error);
+    res.redirect(`${FRONTEND_URL}/login?error=google_auth_failed`);
   }
 }

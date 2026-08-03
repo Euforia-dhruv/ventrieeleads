@@ -8,7 +8,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-AI_PROVIDER = os.getenv("AI_PROVIDER", "ollama")
+AI_PROVIDER = os.getenv("AI_PRIMARY_PROVIDER", os.getenv("AI_PROVIDER", "ollama"))
 AI_MODEL = os.getenv("AI_MODEL", "llama3")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
@@ -59,29 +59,11 @@ class AIClient:
 
     def generate_sync(self, prompt: str, system_prompt: str = None, temperature: float = 0.7, max_tokens: int = 4096) -> str:
         """Synchronous wrapper for generate()."""
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    return pool.submit(asyncio.run, self.generate(prompt, system_prompt, temperature, max_tokens)).result()
-            else:
-                return loop.run_until_complete(self.generate(prompt, system_prompt, temperature, max_tokens))
-        except RuntimeError:
-            return asyncio.run(self.generate(prompt, system_prompt, temperature, max_tokens))
+        return asyncio.run(self.generate(prompt, system_prompt, temperature, max_tokens))
 
     def generate_json_sync(self, prompt: str, system_prompt: str = None) -> Dict:
         """Synchronous wrapper for generate_json()."""
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    return pool.submit(asyncio.run, self.generate_json(prompt, system_prompt)).result()
-            else:
-                return loop.run_until_complete(self.generate_json(prompt, system_prompt))
-        except RuntimeError:
-            return asyncio.run(self.generate_json(prompt, system_prompt))
+        return asyncio.run(self.generate_json(prompt, system_prompt))
 
     def _parse_json(self, text: str) -> Dict:
         """Parse JSON from AI response, handling markdown code blocks."""

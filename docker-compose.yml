@@ -75,6 +75,10 @@ services:
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
       - BCRYPT_ROUNDS=${BCRYPT_ROUNDS:-12}
       - PORT=8000
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL:-http://localhost/api/auth/google/callback}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost}
     depends_on:
       postgres:
         condition: service_healthy
@@ -161,6 +165,13 @@ services:
     environment:
       - DATABASE_URL=postgresql://leads:leads_pass@postgres:5432/leads
       - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
+      - AI_PRIMARY_PROVIDER=${AI_PRIMARY_PROVIDER:-gemini}
+      - AI_MODEL=${AI_MODEL:-gemini-1.5-flash}
+      - AI_FALLBACK_ENABLED=${AI_FALLBACK_ENABLED:-true}
       - LOG_LEVEL=info
       - TIMEZONE=${TIMEZONE:-UTC}
     depends_on:
@@ -192,8 +203,9 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
-      - AI_PRIMARY_PROVIDER=${AI_PRIMARY_PROVIDER:-ollama}
+      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
+      - AI_PRIMARY_PROVIDER=${AI_PRIMARY_PROVIDER:-gemini}
+      - AI_MODEL=${AI_MODEL:-gemini-1.5-flash}
       - AI_FALLBACK_ENABLED=${AI_FALLBACK_ENABLED:-true}
       - LOG_LEVEL=info
       - TIMEZONE=${TIMEZONE:-UTC}

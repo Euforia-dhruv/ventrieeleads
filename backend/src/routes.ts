@@ -5,7 +5,8 @@ import {
   forgotPassword, resetPassword, changePassword,
   verifyEmail, sendVerificationEmail,
   requestMagicLink, verifyMagicLink,
-  getSessions, revokeSession, updateProfile, oauthCallback
+  getSessions, revokeSession, updateProfile, oauthCallback,
+  googleAuth, googleCallback
 } from './controllers/authController';
 import { listApiKeys, createApiKey, revokeApiKey } from './controllers/apiKeyController';
 import {
@@ -110,6 +111,8 @@ export function setupRoutes(): Router {
   router.post('/auth/magic-link', requestMagicLink);
   router.post('/auth/magic-link/verify', verifyMagicLink);
   router.post('/auth/oauth/callback', oauthCallback);
+  router.get('/auth/google', googleAuth);
+  router.get('/auth/google/callback', googleCallback);
 
   // ── Auth (authenticated) ───────────────────────────────────
   router.get('/auth/me', authenticate, me);
