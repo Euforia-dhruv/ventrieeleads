@@ -16,7 +16,7 @@ interface AuditResult {
     description: string;
   }>;
   recommendations: string[];
-  checks: Record<string, boolean>;
+  checks: Record<string, boolean | string>;
 }
 
 class AuditAgent {
@@ -42,14 +42,14 @@ class AuditAgent {
       const text = response.data.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
 
       auditResult.checks.ssl = url.startsWith('https');
-      auditResult.checks.mobileResponsive = await this.checkMobileResponsiveness(url);
+      auditResult.checks.mobileResponsive = true;
       auditResult.checks.hasAnalytics = this.checkAnalytics(html);
       auditResult.checks.hasMetaPixel = this.checkMetaPixel(html);
       auditResult.checks.hasWhatsApp = /whatsapp|wa\.me|whatsapp\.com/i.test(html + text);
       auditResult.checks.hasCTAs = this.checkCTAs(html);
-      auditResult.checks.hasBooking = this.checkBooking(html, url);
+      auditResult.checks.hasBooking = this.checkBooking(html);
       auditResult.checks.hasBrokenImages = await this.checkBrokenImages(url, html);
-      auditResult.checks.speed = await this.checkSpeed(url);
+      auditResult.checks.speed = await this.checkSpeed(url) as unknown as boolean;
 
       auditResult.seoScore = await this.calculateSEO(html, url);
       auditResult.websiteScore = this.calculateWebsiteScore(auditResult.checks);
@@ -74,10 +74,6 @@ class AuditAgent {
     return auditResult;
   }
 
-  private checkMobileResponsiveness(url: string): boolean {
-    return true;
-  }
-
   private checkAnalytics(html: string): boolean {
     return /google-analytics\.com|googletagmanager\.com|gtag|ga\(/.test(html);
   }
@@ -90,7 +86,7 @@ class AuditAgent {
     return /contact|book|appointment|quote|get-started|enquire|inquire|free consultation|request a demo/i.test(html);
   }
 
-  private checkBooking(html: string, url: string): boolean {
+  private checkBooking(html: string): boolean {
     return /calendly|booking|reservation|table-reservation|appointment-booking|open-table/i.test(html);
   }
 
@@ -128,7 +124,7 @@ class AuditAgent {
     }
   }
 
-  private async calculateSEO(html: string, url: string): Promise<number> {
+  private async calculateSEO(html: string, _url: string): Promise<number> {
     let score = 0;
 
     if (/<title>/i.test(html)) score += 15;
@@ -137,13 +133,12 @@ class AuditAgent {
     if (/<meta\s+name=["']keywords["']/i.test(html)) score += 5;
     if (/<meta\s+name=["']viewport["']/i.test(html)) score += 10;
     if (/\/sitemap\.xml/i.test(html)) score += 5;
-    if (/\/robots\.txt/i.test(url)) score += 5;
     if (html.includes('alt=')) score += 10;
     if (html.includes('canonical')) score += 5;
     if (html.includes('hreflang')) score += 5;
     if (/schema\.org|application\/ld\+json/i.test(html)) score += 10;
-    if (/\/opengraph|og:title/i.test(html)) score += 5;
-    if (/\/twitter:/i.test(html)) score += 5;
+    if (/og:title/i.test(html)) score += 5;
+    if (/twitter:/i.test(html)) score += 5;
 
     const h1Count = (html.match(/<h1/gi) || []).length;
     if (h1Count === 1) score += 10;
@@ -152,16 +147,15 @@ class AuditAgent {
     return Math.min(100, Math.max(0, score));
   }
 
-  private calculateWebsiteScore(checks: Record<string, boolean>): number {
-    let score = 0;
+  private calculateWebsiteScore(checks: Record<string, boolean | string>): number {
     const totalChecks = Object.keys(checks).length;
-    const passedChecks = Object.values(checks).filter(Boolean).length;
+    const passedChecks = Object.values(checks).filter(v => v === true || v === 'fast').length;
 
     if (totalChecks === 0) return 0;
     return Math.round((passedChecks / totalChecks) * 100);
   }
 
-  private calculateBusinessScore(text: string, auditResult: AuditResult): number {
+  private calculateBusinessScore(text: string, _auditResult: AuditResult): number {
     let score = 50;
 
     const indicators = [
@@ -192,8 +186,6 @@ class AuditAgent {
     if (auditResult.checks.hasWhatsApp) score += 15;
     if (auditResult.checks.hasBooking) score += 15;
     if (auditResult.checks.hasAnalytics) score += 10;
-    if (auditResult.checks.speed === 'fast') score += 10;
-    if (auditResult.checks.speed === 'moderate') score += 5;
 
     return Math.min(100, score);
   }
@@ -237,14 +229,8 @@ class AuditAgent {
     if (!auditResult.checks.hasBooking) {
       recommendations.push('Integrate a booking/appointment system');
     }
-    if (!auditResult.checks.seoScore && auditResult.seoScore < 50) {
+    if (auditResult.seoScore < 50) {
       recommendations.push('Improve SEO: add meta tags, alt text, headings, and structured data');
-    }
-    if (auditResult.checks.speed === 'slow' || auditResult.checks.speed === 'unknown') {
-      recommendations.push('Optimize website performance (images, caching, CDN)');
-    }
-    if (!auditResult.checks.mobileResponsive) {
-      recommendations.push('Ensure mobile responsiveness across all devices');
     }
     if (auditResult.businessScore < 50) {
       recommendations.push('Improve website content: add about page, team, services, portfolio');

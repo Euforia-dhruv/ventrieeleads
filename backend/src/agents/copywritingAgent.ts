@@ -1,7 +1,7 @@
 import { logger } from '../core/logger';
 
 interface CopywritingOptions {
-  tone: 'professional' | 'friendly' | 'persuasive' | 'luxury' | 'casual' | 'formal';
+  tone: 'professional' | 'friendly' | 'persuasive' | 'luxury' | 'casual';
   length: 'short' | 'medium' | 'long';
   includeCTA: boolean;
   includePricing: boolean;
@@ -58,16 +58,15 @@ class CopywritingAgent {
     context: string,
     opts: CopywritingOptions
   ): { subject: string; body: string } {
-    const subjectTemplates = {
+    const subjectTemplates: Record<string, string> = {
       professional: `Helping ${companyName} Grow with a Stronger Online Presence`,
       friendly: `Quick Idea for ${companyName}'s Website?`,
       persuasive: `Your Website Costing You Customers - Here's How We Can Fix That`,
       luxury: `${companyName}: Elevating Your Digital Presence`,
-      casual: `Hey ${companyName}! Got a Quick Idea?`,
-      formal: `[Subject TBD]`
+      casual: `Hey ${companyName}! Got a Quick Idea?`
     };
 
-    const bodyTemplates = {
+    const bodyTemplates: Record<string, string> = {
       professional: `Dear ${companyName} Team,
 
 I came across ${companyName} while researching businesses in ${leadData.location || 'your area'} and was impressed by what you do.
@@ -123,7 +122,7 @@ Want me to send over a free audit report? It only takes 2 minutes to review.`,
   private generateFollowUpEmail(
     companyName: string,
     leadData: Record<string, any>,
-    opts: CopywritingOptions
+    _opts: CopywritingOptions
   ): { subject: string; body: string } {
     return {
       subject: `Following Up - ${companyName} Web Opportunity`,
@@ -141,7 +140,7 @@ Best regards`
     };
   }
 
-  private generateScope(auditResult: Record<string, any> | undefined, leadData: Record<string, any>): string[] {
+  private generateScope(auditResult: Record<string, any> | undefined, _leadData: Record<string, any>): string[] {
     const scope: string[] = [];
 
     if (!auditResult) {
@@ -152,37 +151,13 @@ Best regards`
       return scope;
     }
 
-    if (auditResult.businessScore < 50) {
-      scope.push('Brand identity and messaging review');
-    }
-
-    if (auditResult.websiteScore < 60) {
-      scope.push('Website performance optimization');
-    }
-
-    if (auditResult.seoScore < 50) {
-      scope.push('SEO audit and on-page optimization');
-    }
-
-    if (auditResult.conversionScore < 50) {
-      scope.push('Conversion rate optimization (CRO)');
-    }
-
-    if (!auditResult.checks?.hasAnalytics) {
-      scope.push('Analytics implementation and tracking setup');
-    }
-
-    if (!auditResult.checks?.hasWhatsApp) {
-      scope.push('WhatsApp business integration');
-    }
-
-    if (auditResult.checks?.speed === 'slow') {
-      scope.push('Website speed optimization');
-    }
-
-    if (!auditResult.checks?.hasCTAs) {
-      scope.push('Call-to-action strategy and implementation');
-    }
+    if (auditResult.businessScore < 50) scope.push('Brand identity and messaging review');
+    if (auditResult.websiteScore < 60) scope.push('Website performance optimization');
+    if (auditResult.seoScore < 50) scope.push('SEO audit and on-page optimization');
+    if (auditResult.conversionScore < 50) scope.push('Conversion rate optimization (CRO)');
+    if (!auditResult.checks?.hasAnalytics) scope.push('Analytics implementation and tracking setup');
+    if (!auditResult.checks?.hasWhatsApp) scope.push('WhatsApp business integration');
+    if (!auditResult.checks?.hasCTAs) scope.push('Call-to-action strategy and implementation');
 
     if (scope.length === 0) {
       scope.push('Website maintenance and continuous improvement');

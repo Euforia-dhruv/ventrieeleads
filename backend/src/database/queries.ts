@@ -11,7 +11,7 @@ export async function getLeads(pool: Pool, filters?: {
 }): Promise<Lead[]> {
   const client = await pool.connect();
   try {
-    let query = 'SELECT * FROM leads WHERE 1=1';
+    let query = 'SELECT * FROM leads WHERE is_deleted = false';
     const params: any[] = [];
     let paramIndex = 1;
 
@@ -22,25 +22,25 @@ export async function getLeads(pool: Pool, filters?: {
     }
 
     if (filters?.city) {
-      query += ` AND city = $${paramIndex}`;
+      query += ` AND company_id IN (SELECT id FROM companies WHERE city = $${paramIndex})`;
       params.push(filters.city);
       paramIndex++;
     }
 
     if (filters?.industry) {
-      query += ` AND industry = $${paramIndex}`;
+      query += ` AND company_id IN (SELECT id FROM companies WHERE industry = $${paramIndex})`;
       params.push(filters.industry);
       paramIndex++;
     }
 
     if (filters?.minScore !== undefined) {
-      query += ` AND lead_score >= $${paramIndex}`;
+      query += ` AND score >= $${paramIndex}`;
       params.push(filters.minScore);
       paramIndex++;
     }
 
     if (filters?.maxScore !== undefined) {
-      query += ` AND lead_score <= $${paramIndex}`;
+      query += ` AND score <= $${paramIndex}`;
       params.push(filters.maxScore);
       paramIndex++;
     }
@@ -60,84 +60,11 @@ export async function getLeads(pool: Pool, filters?: {
   }
 }
 
-export async function getLeadById(pool: Pool, id: number): Promise<Lead | null> {
+export async function getLeadById(pool: Pool, id: string): Promise<Lead | null> {
   const client = await pool.connect();
   try {
-    const result = await client.query('SELECT * FROM leads WHERE id = $1', [id]);
+    const result = await client.query('SELECT * FROM leads WHERE id = $1 AND is_deleted = false', [id]);
     return result.rows[0] || null;
-  } finally {
-    client.release();
-  }
-}
-
-export async function createLead(pool: Pool, lead: Omit<Lead, 'id' | 'created_at' | 'updated_at'>): Promise<Lead> {
-  const client = await pool.connect();
-  try {
-    const result = await client.query(`
-      INSERT INTO leads (
-        company_name, company_website, location, city, country, industry,
-        phone, email, address, description, logo_url, screenshot_url,
-        tech_stack, seo_score, lead_score, status, source, metadata
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-      RETURNING *
-    `, [
-      lead.company_name, lead.company_website, lead.location, lead.city,
-      lead.country, lead.industry, lead.phone, lead.email, lead.address,
-      lead.description, lead.logo_url, lead.screenshot_url,
-      lead.tech_stack, lead.seo_score, lead.lead_score, lead.status,
-      lead.source, JSON.stringify(lead.metadata || {})
-    ]);
-    return result.rows[0];
-  } finally {
-    client.release();
-  }
-}
-
-export async function updateLead(pool: Pool, id: number, updates: Partial<Lead>): Promise<Lead | null> {
-  const client = await pool.connect();
-  try {
-    const sets: string[] = [];
-    const values: any[] = [];
-    let paramIndex = 1;
-
-    const allowedFields = [
-      'company_name', 'company_website', 'location', 'city', 'country',
-      'industry', 'phone', 'email', 'address', 'description',
-      'logo_url', 'screenshot_url', 'tech_stack', 'seo_score', 'lead_score',
-      'status', 'source', 'metadata'
-    ];
-
-    for (const field of allowedFields) {
-      if (updates[field as keyof Lead] !== undefined) {
-        sets.push(`${field} = $${paramIndex}`);
-        values.push((updates as any)[field]);
-        paramIndex++;
-      }
-    }
-
-    if (sets.length === 0) {
-      return getLeadById(pool, id);
-    }
-
-    sets.push(`updated_at = NOW()`);
-    values.push(id);
-
-    const result = await client.query(
-      `UPDATE leads SET ${sets.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
-      values
-    );
-
-    return result.rows[0] || null;
-  } finally {
-    client.release();
-  }
-}
-
-export async function deleteLead(pool: Pool, id: number): Promise<boolean> {
-  const client = await pool.connect();
-  try {
-    const result = await client.query('DELETE FROM leads WHERE id = $1', [id]);
-    return (result.rowCount || 0) > 0;
   } finally {
     client.release();
   }
@@ -146,24 +73,18 @@ export async function deleteLead(pool: Pool, id: number): Promise<boolean> {
 export async function getLeadStats(pool: Pool): Promise<{
   total: number;
   byStatus: Record<string, number>;
-  byIndustry: Record<string, number>;
-  byCity: Record<string, number>;
-  avgLeadScore: number;
+  avgScore: number;
 }> {
   const client = await pool.connect();
   try {
-    const total = await client.query('SELECT COUNT(*) FROM leads');
-    const byStatus = await client.query('SELECT status, COUNT(*) as count FROM leads GROUP BY status');
-    const byIndustry = await client.query('SELECT industry, COUNT(*) as count FROM leads GROUP BY industry');
-    const byCity = await client.query('SELECT city, COUNT(*) as count FROM leads GROUP BY city ORDER BY count DESC LIMIT 20');
-    const avgScore = await client.query('SELECT AVG(lead_score) as avg FROM leads');
+    const total = await client.query('SELECT COUNT(*) FROM leads WHERE is_deleted = false');
+    const byStatus = await client.query('SELECT status, COUNT(*) as count FROM leads WHERE is_deleted = false GROUP BY status');
+    const avgScore = await client.query('SELECT AVG(score) as avg FROM leads WHERE is_deleted = false');
 
     return {
       total: parseInt(total.rows[0].count),
-      byStatus: Object.fromEntries(byStatus.rows.map((r: any) => [r.status, r.count])),
-      byIndustry: Object.fromEntries(byIndustry.rows.map((r: any) => [r.industry, r.count])),
-      byCity: Object.fromEntries(byCity.rows.map((r: any) => [r.city, r.count])),
-      avgLeadScore: parseFloat(avg.rows[0].avg || '0')
+      byStatus: Object.fromEntries(byStatus.rows.map((r: any) => [r.status, parseInt(r.count)])),
+      avgScore: parseFloat(avgScore.rows[0].avg || '0')
     };
   } finally {
     client.release();

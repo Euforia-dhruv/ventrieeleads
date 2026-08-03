@@ -10,8 +10,8 @@ export function formatDate(date: string | Date) {
   return format(new Date(date), 'MMM d, yyyy');
 }
 
-export function formatCurrency(value: number, currency: string = 'AED') {
-  return new Intl.NumberFormat('en-AE', { style: 'currency', currency }).format(value);
+export function formatCurrency(value: number, currency: string = 'USD') {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value);
 }
 
 export function truncate(str: string, length: number = 100) {

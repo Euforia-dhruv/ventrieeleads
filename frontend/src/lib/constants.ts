@@ -1,0 +1,21 @@
+export const POPULAR_LOCATIONS = [
+  { name: 'Dubai', country: 'UAE', areas: ['Downtown Dubai', 'Business Bay', 'Dubai Marina'] },
+  { name: 'Abu Dhabi', country: 'UAE', areas: ['Al Reem Island', 'Saadiyat Island', 'Yas Island'] },
+  { name: 'Sharjah', country: 'UAE', areas: ['Al Majaz', 'Al Nahda', 'Al Khan'] },
+  { name: 'London', country: 'UK', areas: ['Shoreditch', 'Canary Wharf', 'Soho'] },
+  { name: 'New York', country: 'USA', areas: ['Manhattan', 'Brooklyn', 'Queens'] },
+  { name: 'Singapore', country: 'Singapore', areas: ['Marina Bay', 'Orchard', 'CBD'] },
+  { name: 'Riyadh', country: 'Saudi Arabia', areas: ['Olaya', 'Al Malqa', 'King Abdullah District'] },
+  { name: 'Mumbai', country: 'India', areas: ['Bandra', 'Andheri', 'Lower Parel'] },
+];
+
+export const UAE_EMIRATES = POPULAR_LOCATIONS.filter(l => l.country === 'UAE');
+
+export const INDUSTRIES = [
+  'Real Estate', 'Technology', 'Healthcare', 'Finance', 'Education',
+  'Hospitality', 'Retail', 'Manufacturing', 'Construction', 'Automotive',
+  'Food & Beverage', 'Fashion', 'Beauty & Wellness', 'Travel & Tourism',
+  'Logistics', 'Marketing & Advertising', 'Legal', 'Consulting',
+  'E-commerce', 'SaaS', 'Media & Entertainment', 'Agriculture',
+  'Energy', 'Telecommunications', 'Insurance', 'Sports & Fitness', 'Other'
+];

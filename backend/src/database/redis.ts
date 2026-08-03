@@ -1,17 +1,17 @@
-import Redis from 'redis';
+import { createClient, RedisClientType } from 'redis';
 import { logger } from '../core/logger';
 
 export class RedisClient {
-  private client: Redis.RedisClientType;
-  private subscriber: Redis.RedisClientType | null = null;
+  private client: RedisClientType;
+  private subscriber: RedisClientType | null = null;
 
   constructor() {
-    this.client = Redis.createClient({
+    this.client = createClient({
       url: process.env.REDIS_URL || 'redis://localhost:6379'
-    });
+    }) as RedisClientType;
 
     if (process.env.REDIS_PASSWORD) {
-      this.client.options.password = process.env.REDIS_PASSWORD;
+      (this.client as any).options.password = process.env.REDIS_PASSWORD;
     }
   }
 
@@ -34,17 +34,17 @@ export class RedisClient {
     }
   }
 
-  getClient(): Redis.RedisClientType {
+  getClient(): RedisClientType {
     return this.client;
   }
 
-  createSubscriber(): Redis.RedisClientType {
+  createSubscriber(): RedisClientType {
     if (!this.subscriber) {
-      this.subscriber = Redis.createClient({
+      this.subscriber = createClient({
         url: process.env.REDIS_URL || 'redis://localhost:6379'
-      });
+      }) as RedisClientType;
       if (process.env.REDIS_PASSWORD) {
-        this.subscriber.options.password = process.env.REDIS_PASSWORD;
+        (this.subscriber as any).options.password = process.env.REDIS_PASSWORD;
       }
     }
     return this.subscriber;

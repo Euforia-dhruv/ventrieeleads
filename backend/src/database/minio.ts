@@ -1,13 +1,12 @@
-import Minio from 'minio';
+import { Client } from 'minio';
 import { logger } from '../core/logger';
-import { DatabaseError } from '../core/errorHandler';
 
 export class MinioClient {
-  private client: Minio.Client;
+  private client: Client;
   private initialized = false;
 
   constructor() {
-    this.client = new Minio.Client({
+    this.client = new Client({
       endPoint: process.env.MINIO_ENDPOINT || 'localhost',
       port: parseInt(process.env.MINIO_PORT || '9000'),
       useSSL: process.env.MINIO_USE_SSL === 'true',
@@ -18,31 +17,25 @@ export class MinioClient {
 
   async initialize(): Promise<void> {
     try {
-      const exists = await this.client.bucketExists(process.env.MINIO_BUCKET_LEADS || 'leads');
-      if (!exists) {
-        await this.client.makeBucket(process.env.MINIO_BUCKET_LEADS || 'leads');
-        await this.client.bucketQos(process.env.MINIO_BUCKET_LEADS || 'leads', {
-          'Location': 'us-east-1'
-        });
-      }
+      const buckets = [
+        process.env.MINIO_BUCKET_LEADS || 'leads',
+        process.env.MINIO_BUCKET_SCREENSHOTS || 'screenshots',
+        process.env.MINIO_BUCKET_LOGOS || 'logos',
+        process.env.MINIO_BUCKET_FILES || 'files'
+      ];
 
-      const screenshotsBucket = process.env.MINIO_BUCKET_SCREENSHOTS || 'screenshots';
-      const existsScreenshots = await this.client.bucketExists(screenshotsBucket);
-      if (!existsScreenshots) {
-        await this.client.makeBucket(screenshotsBucket);
-      }
-
-      const logosBucket = process.env.MINIO_BUCKET_LOGOS || 'logos';
-      const existsLogos = await this.client.bucketExists(logosBucket);
-      if (!existsLogos) {
-        await this.client.makeBucket(logosBucket);
+      for (const bucket of buckets) {
+        const exists = await this.client.bucketExists(bucket);
+        if (!exists) {
+          await this.client.makeBucket(bucket, 'us-east-1');
+          logger.info(`Created MinIO bucket: ${bucket}`);
+        }
       }
 
       this.initialized = true;
       logger.info('MinIO initialized successfully');
     } catch (error) {
       logger.error('Failed to initialize MinIO:', error);
-      throw new DatabaseError('MinIO initialization failed');
     }
   }
 
@@ -50,20 +43,17 @@ export class MinioClient {
     return this.initialized;
   }
 
-  getClient(): Minio.Client {
-    if (!this.initialized) {
-      throw new DatabaseError('MinIO not initialized');
-    }
+  getClient(): Client {
     return this.client;
   }
 
   async uploadFile(bucket: string, objectName: string, filePath: string): Promise<string> {
     if (!this.initialized) {
-      throw new DatabaseError('MinIO not initialized');
+      throw new Error('MinIO not initialized');
     }
     const exists = await this.client.bucketExists(bucket);
     if (!exists) {
-      await this.client.makeBucket(bucket);
+      await this.client.makeBucket(bucket, 'us-east-1');
     }
     await this.client.fPutObject(bucket, objectName, filePath);
     return `${bucket}/${objectName}`;
@@ -71,11 +61,11 @@ export class MinioClient {
 
   async uploadBuffer(bucket: string, objectName: string, buffer: Buffer): Promise<string> {
     if (!this.initialized) {
-      throw new DatabaseError('MinIO not initialized');
+      throw new Error('MinIO not initialized');
     }
     const exists = await this.client.bucketExists(bucket);
     if (!exists) {
-      await this.client.makeBucket(bucket);
+      await this.client.makeBucket(bucket, 'us-east-1');
     }
     await this.client.putObject(bucket, objectName, buffer);
     return `${bucket}/${objectName}`;
@@ -83,14 +73,20 @@ export class MinioClient {
 
   async getFile(bucket: string, objectName: string): Promise<Buffer> {
     if (!this.initialized) {
-      throw new DatabaseError('MinIO not initialized');
+      throw new Error('MinIO not initialized');
     }
-    return await this.client.getObject(bucket, objectName);
+    const stream = await this.client.getObject(bucket, objectName);
+    const chunks: Buffer[] = [];
+    return new Promise((resolve, reject) => {
+      stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+      stream.on('error', reject);
+    });
   }
 
   async removeFile(bucket: string, objectName: string): Promise<void> {
     if (!this.initialized) {
-      throw new DatabaseError('MinIO not initialized');
+      throw new Error('MinIO not initialized');
     }
     await this.client.removeObject(bucket, objectName);
   }

@@ -1,0 +1,55 @@
+FROM python:3.12-slim
+
+RUN groupadd -r appgroup && useradd -r -g appgroup -d /app -s /sbin/nologin appuser
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    wget \
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2t64 \
+    libatspi2.0-0 \
+    libglib2.0-0 \
+    libx11-6 \
+    libxcb1 \
+    libxext6 \
+    fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+RUN playwright install chromium
+
+RUN mkdir -p /app/.cache && \
+    cp -r /root/.cache/ms-playwright /app/.cache/ms-playwright && \
+    chown -R appuser:appgroup /app/.cache
+
+COPY worker/ ./worker/
+
+RUN mkdir -p /app/data/screenshots && chown -R appuser:appgroup /app
+
+EXPOSE 8000
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD python -c "import redis; r = redis.Redis.from_url('redis://redis:6379'); r.ping()" || exit 1
+
+CMD ["celery", "-A", "worker.celery_app", "worker", "--loglevel=info", "--concurrency=4"]

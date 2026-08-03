@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { logger } from '../core/logger';
 import { getPool } from '../database/connection';
-import { createLead } from '../database/queries';
 
 interface SearchResult {
   name: string;
@@ -72,121 +71,19 @@ class ScoutAgent {
     }
   }
 
-  async searchDubaiBusinessDirectory(config: ScoutConfig): Promise<SearchResult[]> {
-    logger.info(`ScoutAgent: Searching Dubai Business Directory for "${config.query}"`);
-
-    try {
-      const response = await axios.get(
-        `https://api.dubai-businessdirectory.com/v2/search`,
-        {
-          params: {
-            q: config.query,
-            location: config.location,
-            category: config.industry,
-            limit: config.maxResults
-          },
-          timeout: 15000
-        }
-      );
-
-      return (response.data?.results || []).map((item: any) => ({
-        name: item.name,
-        address: item.address || '',
-        phone: item.phone || '',
-        website: item.website || '',
-        rating: item.rating || 0,
-        reviews: 0,
-        category: item.category || config.industry,
-        location: config.location
-      }));
-    } catch (error) {
-      logger.error('ScoutAgent: Dubai Business Directory search failed:', error);
-      return [];
-    }
-  }
-
-  async searchYellowPages(config: ScoutConfig): Promise<SearchResult[]> {
-    logger.info(`ScoutAgent: Searching Yellow Pages for "${config.query}"`);
-    return [];
-  }
-
-  async searchYelloUAE(config: ScoutConfig): Promise<SearchResult[]> {
-    logger.info(`ScoutAgent: Searching Yello UAE for "${config.query}"`);
-    return [];
-  }
-
-  async searchCrunchbase(config: ScoutConfig): Promise<SearchResult[]> {
-    logger.info(`ScoutAgent: Searching Crunchbase for "${config.query}"`);
-    return [];
-  }
-
   async discover(config: ScoutConfig): Promise<SearchResult[]> {
     logger.info(`ScoutAgent: Starting discovery for "${config.query}" in ${config.location}`);
-
     const results = await this.searchGoogleMaps(config);
-
     const dedupResults = this.deduplicate(results);
-
     logger.info(`ScoutAgent: Discovery complete. Found ${dedupResults.length} unique leads`);
     return dedupResults;
-  }
-
-  async discoverAndStore(config: ScoutConfig): Promise<{ found: number; stored: number }> {
-    const results = await this.discover(config);
-    let stored = 0;
-
-    for (const result of results) {
-      try {
-        const existing = await getPool().query(
-          'SELECT id FROM leads WHERE company_website = $1',
-          [result.website]
-        );
-
-        if (existing.rows.length > 0) {
-          continue;
-        }
-
-        await createLead(getPool(), {
-          company_name: result.name,
-          company_website: result.website,
-          location: `${result.address}, ${result.location}`,
-          city: config.city,
-          country: config.country,
-          industry: result.category,
-          phone: result.phone,
-          email: '',
-          address: result.address,
-          description: `Scouted via ${config.source}`,
-          logo_url: '',
-          screenshot_url: '',
-          tech_stack: [],
-          seo_score: 0,
-          lead_score: 0,
-          status: 'New',
-          source: config.source,
-          metadata: {
-            rating: result.rating,
-            reviews: result.reviews,
-            raw: result
-          }
-        });
-
-        stored++;
-      } catch (error) {
-        logger.error(`ScoutAgent: Failed to store lead ${result.name}:`, error);
-      }
-    }
-
-    return { found: results.length, stored };
   }
 
   private deduplicate(results: SearchResult[]): SearchResult[] {
     const seen = new Set<string>();
     return results.filter((result) => {
       const key = result.name.toLowerCase().trim();
-      if (seen.has(key)) {
-        return false;
-      }
+      if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });

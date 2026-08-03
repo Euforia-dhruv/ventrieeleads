@@ -86,7 +86,7 @@ class ProposalAgent {
     const multiplier = 1 + (scopeLength * 0.15);
     const low = Math.round(basePrice * multiplier);
     const high = Math.round(low * 1.3);
-    return { low, high, currency: 'AED', interval: 'one-time' };
+    return { low, high, currency: 'USD', interval: 'one-time' };
   }
 }
 

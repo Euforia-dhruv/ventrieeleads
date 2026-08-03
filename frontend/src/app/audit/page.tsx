@@ -2,17 +2,16 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Scan, AlertCircle, CheckCircle, XCircle, TrendingUp } from 'lucide-react';
+import { Scan, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { cn, getScoreColor, getScoreBg } from '@/lib/utils';
-import type { AuditResult } from '@/types/leads';
+import { cn } from '@/lib/utils';
+import type { AuditReport } from '@/types/leads';
 
 export default function AuditPage() {
   const [url, setUrl] = useState('');
-  const [result, setResult] = useState<AuditResult | null>(null);
+  const [result, setResult] = useState<AuditReport | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleAudit = async () => {
@@ -33,10 +32,12 @@ export default function AuditPage() {
   };
 
   const scoreBars = [
-    { label: 'Business Score', value: result?.business_score ?? 0, color: 'bg-blue-500' },
-    { label: 'Website Score', value: result?.website_score ?? 0, color: 'bg-green-500' },
     { label: 'SEO Score', value: result?.seo_score ?? 0, color: 'bg-purple-500' },
-    { label: 'Conversion Score', value: result?.conversion_score ?? 0, color: 'bg-orange-500' }
+    { label: 'Performance', value: result?.performance_score ?? 0, color: 'bg-blue-500' },
+    { label: 'Design', value: result?.design_score ?? 0, color: 'bg-green-500' },
+    { label: 'Conversion', value: result?.conversion_score ?? 0, color: 'bg-orange-500' },
+    { label: 'Accessibility', value: result?.accessibility_score ?? 0, color: 'bg-yellow-500' },
+    { label: 'Trust', value: result?.trust_score ?? 0, color: 'bg-red-500' }
   ];
 
   return (
@@ -50,7 +51,7 @@ export default function AuditPage() {
         <CardContent className="p-6">
           <div className="flex gap-4">
             <Input
-              placeholder="https://example.com"
+              placeholder="https://your-website.com"
               value={url}
               onChange={e => setUrl(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleAudit()}
@@ -66,15 +67,22 @@ export default function AuditPage() {
 
       {result && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="p-4 text-center">
+              <div className="text-5xl font-bold mb-2">{result.overall_score}</div>
+              <div className="text-sm text-muted-foreground">Overall Score</div>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {scoreBars.map(bar => (
               <Card key={bar.label}>
                 <CardContent className="p-4 text-center">
-                  <div className="text-3xl font-bold">{bar.value}</div>
+                  <div className="text-2xl font-bold">{bar.value}</div>
                   <div className="text-xs text-muted-foreground mt-1">{bar.label}</div>
                   <div className="w-full h-2 bg-secondary rounded-full mt-3 overflow-hidden">
                     <div
-                      className={cn('h-full rounded-full transition-all', bar.color, `w-[${bar.value}%]`)}
+                      className={cn('h-full rounded-full transition-all', bar.color)}
                       style={{ width: `${bar.value}%` }}
                     />
                   </div>
@@ -86,53 +94,75 @@ export default function AuditPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Checks</CardTitle>
+                <CardTitle className="text-lg">Issues</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {Object.entries(result.checks ?? {}).map(([key, passed]) => (
-                  <div key={key} className="flex items-center justify-between">
-                    <span className="text-sm capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                    {passed ? (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-red-500" />
-                    )}
+                {(result.issues || []).map((issue: any, i: number) => (
+                  <div key={i} className="flex items-start gap-2 text-sm">
+                    <XCircle className={cn('h-4 w-4 mt-0.5 shrink-0', {
+                      'text-red-500': issue.severity === 'critical' || issue.severity === 'high',
+                      'text-yellow-500': issue.severity === 'medium',
+                      'text-blue-500': issue.severity === 'low'
+                    })} />
+                    <div>
+                      <div className="font-medium">{issue.title}</div>
+                      <div className="text-xs text-muted-foreground">{issue.description}</div>
+                    </div>
                   </div>
                 ))}
+                {(result.issues || []).length === 0 && (
+                  <p className="text-sm text-muted-foreground">No issues found</p>
+                )}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Recommendations</CardTitle>
+                <CardTitle className="text-lg">Quick Wins</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2">
-                  {(result.recommendations || []).map((rec, i) => (
+                  {(result.quick_wins || []).map((qw: string, i: number) => (
                     <li key={i} className="flex items-start gap-2 text-sm">
                       <AlertCircle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
-                      {rec}
+                      {qw}
                     </li>
                   ))}
-                  {(result.recommendations || []).length === 0 && (
-                    <p className="text-sm text-muted-foreground">No major issues found</p>
+                  {(result.quick_wins || []).length === 0 && (
+                    <p className="text-sm text-muted-foreground">No quick wins identified</p>
                   )}
                 </ul>
               </CardContent>
             </Card>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card className="bg-green-500/5 border-green-500/20">
               <CardContent className="p-4">
-                <div className="text-sm text-muted-foreground mb-1">Est. Project Value</div>
-                <div className="text-2xl font-bold text-green-500">{result.estimated_project_value}</div>
+                <div className="text-sm text-muted-foreground mb-1">Est. Redesign Budget</div>
+                <div className="text-xl font-bold text-green-500">{result.estimated_redesign_budget}</div>
               </CardContent>
             </Card>
             <Card className="bg-blue-500/5 border-blue-500/20">
               <CardContent className="p-4">
-                <div className="text-sm text-muted-foreground mb-1">Expected ROI</div>
-                <div className="text-2xl font-bold text-blue-500">{result.expected_roi}</div>
+                <div className="text-sm text-muted-foreground mb-1">Recommended Services</div>
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {(result.recommended_services || []).map((s: string, i: number) => (
+                    <span key={i} className="text-xs bg-blue-500/10 text-blue-500 px-2 py-1 rounded">{s}</span>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-purple-500/5 border-purple-500/20">
+              <CardContent className="p-4">
+                <div className="text-sm text-muted-foreground mb-1">Strengths</div>
+                <div className="space-y-1 mt-2">
+                  {(result.strengths || []).slice(0, 4).map((s: string, i: number) => (
+                    <div key={i} className="flex items-center gap-1 text-xs">
+                      <CheckCircle className="h-3 w-3 text-green-500" /> {s}
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           </div>

@@ -16,15 +16,14 @@ export async function GET() {
         totalLeads: 0,
         qualifiedLeads: 0,
         todayLeads: 0,
-        emailsGenerated: 0,
-        outreachQueue: 0,
-        meetingsScheduled: 0,
-        revenuePipeline: 0,
         hotLeads: 0,
         coldLeads: 0,
+        jobsRunning: 0,
+        jobsCompleted: 0,
         avgLeadScore: 0,
         byIndustry: {},
-        byCity: {}
+        byCity: {},
+        byStatus: {}
       }
     });
   }

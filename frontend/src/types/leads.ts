@@ -1,9 +1,11 @@
 export interface Lead {
-  id: number;
+  id: string;
+  company_id: string;
   company_name: string;
   company_website: string;
   location: string;
   city: string;
+  area: string;
   country: string;
   industry: string;
   phone: string;
@@ -15,8 +17,12 @@ export interface Lead {
   tech_stack: string[];
   seo_score: number;
   lead_score: number;
+  score: number;
+  score_label: string;
   status: LeadStatus;
   source: string;
+  rating: number;
+  review_count: number;
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
@@ -35,7 +41,7 @@ export type LeadStatus =
   | 'Lost';
 
 export interface Campaign {
-  id: number;
+  id: string;
   name: string;
   status: string;
   industry_filter: string[];
@@ -46,40 +52,64 @@ export interface Campaign {
   updated_at: string;
 }
 
+export interface SearchJob {
+  id: string;
+  query: string;
+  country: string;
+  city: string;
+  area: string;
+  industry: string;
+  keyword: string;
+  max_results: number;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  progress: number;
+  results_count: number;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
 export interface AuditReport {
-  id?: number;
-  lead_id?: number;
+  id?: string;
+  website_id?: string;
   url?: string;
-  business_score: number;
   website_score: number;
   seo_score: number;
+  performance_score: number;
+  accessibility_score: number;
+  design_score: number;
+  branding_score: number;
   conversion_score: number;
-  expected_roi?: string;
-  estimated_project_value?: string;
+  copywriting_score: number;
+  trust_score: number;
+  overall_score: number;
+  checks: Record<string, any>;
   issues: Array<{
     category: string;
     severity: 'low' | 'medium' | 'high' | 'critical';
     title: string;
     description: string;
   }>;
-  recommendations: string[];
-  checks: Record<string, boolean>;
+  strengths: string[];
+  weaknesses: string[];
+  quick_wins: string[];
+  estimated_redesign_budget: string;
+  recommended_services: string[];
 }
 
 export interface DashboardStats {
   totalLeads: number;
   qualifiedLeads: number;
   todayLeads: number;
-  emailsGenerated: number;
-  outreachQueue: number;
-  meetingsScheduled: number;
-  revenuePipeline: number;
   hotLeads: number;
   coldLeads: number;
+  jobsRunning: number;
+  jobsCompleted: number;
+  avgLeadScore: number;
+  byStatus: Record<string, number>;
   byIndustry: Record<string, number>;
   byCity: Record<string, number>;
-  byCountry: Record<string, number>;
-  avgLeadScore: number;
 }
 
 export interface UAEArea {

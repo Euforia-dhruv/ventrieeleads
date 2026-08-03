@@ -3,15 +3,356 @@ name: CD Pipeline
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      rollback:
+        description: "Rollback to a previous image tag"
+        required: false
+        default: ""
+      environment:
+        description: "Target environment"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/leads-backend
+  FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/leads-frontend
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  # ── Build & Push Docker Images ──────────────────────────────
+  build-push:
+    name: Build & Push Images
     runs-on: ubuntu-latest
-    environment: production
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-tag: ${{ steps.meta.outputs.version }}
+      backend-digest: ${{ steps.build-backend.outputs.digest }}
+      frontend-digest: ${{ steps.build-frontend.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy to production
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.BACKEND_IMAGE }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push backend
+        id: build-backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.typescript
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend
+        id: build-frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.version }}
+            ${{ env.FRONTEND_IMAGE }}:latest
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Deploy to Staging ───────────────────────────────────────
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build-push
+    if: github.ref == 'refs/heads/main' || github.event.inputs.environment == 'staging'
+    environment:
+      name: staging
+      url: https://staging.ventrieeleads.qd.je
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to staging server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          port: ${{ secrets.STAGING_PORT || 22 }}
+          script: |
+            set -euo pipefail
+
+            echo "Pulling latest images..."
+            docker pull ${{ env.BACKEND_IMAGE }}:latest
+            docker pull ${{ env.FRONTEND_IMAGE }}:latest
+
+            echo "Backing up current state..."
+            docker compose -f docker-compose.yml ps > /tmp/deploy-backup-$(date +%s).txt
+
+            echo "Updating services..."
+            cd /opt/leads
+            export BACKEND_IMAGE=${{ env.BACKEND_IMAGE }}:latest
+            export FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE }}:latest
+            docker compose pull backend frontend
+            docker compose up -d --remove-orphans --no-deps backend frontend
+
+            echo "Waiting for health check..."
+            sleep 15
+
+            if curl -sf http://localhost:8000/health > /dev/null; then
+              echo "Backend healthy"
+            else
+              echo "Backend health check failed"
+              exit 1
+            fi
+
+            if curl -sf http://localhost:3000/ > /dev/null; then
+              echo "Frontend healthy"
+            else
+              echo "Frontend health check failed"
+              exit 1
+            fi
+
+            echo "Staging deployment successful"
+
+  # ── Production Approval Gate ─────────────────────────────────
+  production-approval:
+    name: Production Approval
+    runs-on: ubuntu-latest
+    needs: [build-push, deploy-staging]
+    if: github.event.inputs.environment == 'production' || (github.ref == 'refs/heads/main' && github.event.inputs.rollback == '')
+    environment:
+      name: production
+    steps:
+      - name: Production approval received
+        run: echo "Production deployment approved"
+
+  # ── Deploy to Production ────────────────────────────────────
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-push, production-approval]
+    if: always() && needs.production-approval.result == 'success'
+    environment:
+      name: production
+      url: https://ventrieeleads.qd.je
+    outputs:
+      deployed-version: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine image tag
+        id: version
         run: |
-          echo "Deploy to production environment"
-          echo "Run docker compose up -d"
+          if [ -n "${{ github.event.inputs.rollback }}" ]; then
+            echo "tag=${{ github.event.inputs.rollback }}" >> $GITHUB_OUTPUT
+            echo "Rolling back to: ${{ github.event.inputs.rollback }}"
+          else
+            echo "tag=${{ needs.build-push.outputs.image-tag }}" >> $GITHUB_OUTPUT
+            echo "Deploying: ${{ needs.build-push.outputs.image-tag }}"
+          fi
+
+      - name: Create deployment marker
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: 'pending',
+              description: `Deploying to production: ${{ steps.version.outputs.tag }}`,
+              context: 'production-deploy'
+            });
+
+      - name: Deploy to production server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          port: ${{ secrets.PRODUCTION_PORT || 22 }}
+          script: |
+            set -euo pipefail
+
+            IMAGE_TAG="${{ steps.version.outputs.tag }}"
+            BACKEND_IMAGE="${{ env.BACKEND_IMAGE }}:${IMAGE_TAG}"
+            FRONTEND_IMAGE="${{ env.FRONTEND_IMAGE }}:${IMAGE_TAG}"
+
+            echo "Deploying version: $IMAGE_TAG"
+
+            cd /opt/leads
+
+            echo "Saving current state for rollback..."
+            docker compose ps > /tmp/pre-deploy-state.txt
+            CURRENT_BACKEND=$(docker compose images backend -q | head -1)
+            CURRENT_FRONTEND=$(docker compose images frontend -q | head -1)
+
+            echo "Pulling new images..."
+            docker pull "$BACKEND_IMAGE"
+            docker pull "$FRONTEND_IMAGE"
+
+            echo "Tagging images for compose..."
+            docker tag "$BACKEND_IMAGE" leads-backend:latest
+            docker tag "$FRONTEND_IMAGE" leads-frontend:latest
+
+            echo "Running database migrations..."
+            docker compose run --rm backend node dist/index.js migrate || echo "No migrations or already applied"
+
+            echo "Deploying backend..."
+            docker compose up -d --remove-orphans --no-deps backend
+            sleep 10
+
+            if ! curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+              echo "Backend health check failed. Rolling back..."
+              if [ -n "$CURRENT_BACKEND" ]; then
+                docker tag "$CURRENT_BACKEND" leads-backend:latest
+                docker compose up -d --remove-orphans --no-deps backend
+              fi
+              exit 1
+            fi
+
+            echo "Deploying frontend..."
+            docker compose up -d --remove-orphans --no-deps frontend
+            sleep 10
+
+            if ! curl -sf http://localhost:3000/ > /dev/null 2>&1; then
+              echo "Frontend health check failed. Rolling back..."
+              if [ -n "$CURRENT_FRONTEND" ]; then
+                docker tag "$CURRENT_FRONTEND" leads-frontend:latest
+                docker compose up -d --remove-orphans --no-deps frontend
+              fi
+              exit 1
+            fi
+
+            echo "Cleaning up old images..."
+            docker image prune -f --filter "until=72h" || true
+
+            echo "Production deployment successful: $IMAGE_TAG"
+
+      - name: Post-deployment smoke tests
+        run: |
+          PROD_URL="https://ventrieeleads.qd.je"
+
+          echo "Running smoke tests..."
+
+          echo "1. Testing health endpoint..."
+          if ! curl -sf "${PROD_URL}/api/health" > /dev/null 2>&1; then
+            echo "Health check failed"
+            exit 1
+          fi
+          echo "   Health OK"
+
+          echo "2. Testing frontend..."
+          if ! curl -sf "${PROD_URL}/" > /dev/null 2>&1; then
+            echo "Frontend check failed"
+            exit 1
+          fi
+          echo "   Frontend OK"
+
+          echo "3. Testing API response time..."
+          RESPONSE_TIME=$(curl -sf -o /dev/null -w "%{time_total}" "${PROD_URL}/api/health")
+          echo "   Response time: ${RESPONSE_TIME}s"
+          if (( $(echo "$RESPONSE_TIME > 3.0" | bc -l) )); then
+            echo "WARNING: Response time is slow (>3s)"
+          fi
+
+          echo "4. Testing auth endpoint availability..."
+          HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" -X POST "${PROD_URL}/api/auth/login" -H "Content-Type: application/json" -d '{}')
+          if [ "$HTTP_CODE" = "400" ]; then
+            echo "   Auth endpoint responding (expected 400 for empty body)"
+          else
+            echo "   WARNING: Auth returned $HTTP_CODE"
+          fi
+
+          echo "All smoke tests passed"
+
+      - name: Update deployment status
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const state = '${{ job.status }}' === 'success' ? 'success' : 'failure';
+            const desc = state === 'success'
+              ? `Deployed ${{ needs.build-push.outputs.image-tag }} to production`
+              : 'Production deployment failed';
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state,
+              description: desc,
+              context: 'production-deploy'
+            });
+
+  # ── Rollback ────────────────────────────────────────────────
+  rollback:
+    name: Rollback Production
+    runs-on: ubuntu-latest
+    if: github.event.inputs.rollback != ''
+    environment:
+      name: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rollback to previous version
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          port: ${{ secrets.PRODUCTION_PORT || 22 }}
+          script: |
+            set -euo pipefail
+
+            ROLLBACK_TAG="${{ github.event.inputs.rollback }}"
+            echo "Rolling back to: $ROLLBACK_TAG"
+
+            BACKEND_IMAGE="${{ env.BACKEND_IMAGE }}:${ROLLBACK_TAG}"
+            FRONTEND_IMAGE="${{ env.FRONTEND_IMAGE }}:${ROLLBACK_TAG}"
+
+            cd /opt/leads
+
+            docker pull "$BACKEND_IMAGE" || { echo "Backend image not found"; exit 1; }
+            docker pull "$FRONTEND_IMAGE" || { echo "Frontend image not found"; exit 1; }
+
+            docker tag "$BACKEND_IMAGE" leads-backend:latest
+            docker tag "$FRONTEND_IMAGE" leads-frontend:latest
+
+            docker compose up -d --remove-orphans
+
+            sleep 15
+
+            if curl -sf http://localhost:8000/health > /dev/null && curl -sf http://localhost:3000/ > /dev/null; then
+              echo "Rollback to $ROLLBACK_TAG successful"
+            else
+              echo "Rollback health check failed"
+              exit 1
+            fi

@@ -26,7 +26,7 @@ const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(({ classN
 ));
 CardTitle.displayName = 'CardTitle';
 
-const CardDescription = React.forwardRef<HTMLParagraphElement>(({ className, ...props }, ref) => (
+const CardDescription = React.forwardRef<HTMLParagraphElement, CardDescriptionProps>(({ className, ...props }, ref) => (
   <p ref={ref} className={cn('text-sm text-muted-foreground', className)} {...props} />
 ));
 CardDescription.displayName = 'CardDescription';

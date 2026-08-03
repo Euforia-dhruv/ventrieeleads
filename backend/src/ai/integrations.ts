@@ -196,4 +196,3 @@ Respond with JSON format: {"score": <number>, "reasoning": "<explanation>"}`;
 }
 
 export const aiIntegration = new AIIntegration();
-export type { AISettings };

@@ -54,7 +54,7 @@ class LightpandaBrowser {
         deviceScaleFactor: config.deviceScaleFactor,
         userAgent: config.userAgent,
         locale: 'en-US',
-        timezoneId: 'Asia/Dubai'
+        timezoneId: process.env.TIMEZONE || 'UTC'
       });
 
       const page = await context.newPage();
@@ -180,4 +180,3 @@ class LightpandaBrowser {
 }
 
 export const lightpandaBrowser = new LightpandaBrowser();
-export type { LightpandaConfig, BrowserSession };

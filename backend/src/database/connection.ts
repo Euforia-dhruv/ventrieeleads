@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
-import { logger } from './logger';
-import { DatabaseError } from './errorHandler';
+import { logger } from '../core/logger';
+import { DatabaseError } from '../core/errorHandler';
 
 let pool: Pool | null = null;
 

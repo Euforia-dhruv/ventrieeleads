@@ -2,114 +2,100 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Globe, MapPin, Briefcase, Zap } from 'lucide-react';
+import { Search, Globe, MapPin, Briefcase, Zap, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 
-const LOCATIONS = {
-  UAE: {
-    Dubai: ['Downtown Dubai', 'Business Bay', 'Dubai Marina', 'Jumeirah', 'Palm Jumeirah', 'Deira', 'JLT', 'Al Barsha', 'Silicon Oasis', 'Internet City', 'Media City', 'Design District', 'Healthcare City', 'Jebal Ali'],
-    Abu Dhabi: ['Al Reem Island', 'Khalifa City', 'Yas Island', 'Saadiyat Island', 'Mussafah', 'Masdar City', 'Al Raha'],
-    Sharjah: ['Al Majaz', 'Al Nahda', 'Al Khan', 'Muwaileh', 'Industrial Area']
+const UAE_EMIRATES = [
+  {
+    name: 'Dubai',
+    areas: ['Downtown Dubai', 'Business Bay', 'Dubai Marina', 'Jumeirah', 'Palm Jumeirah', 'Deira', 'Bur Dubai', 'JLT', 'Al Barsha', 'Silicon Oasis', 'Internet City', 'Media City', 'Design District', 'Healthcare City', 'Motor City', 'Arabian Ranches', 'Dubai Hills', 'Mirdif', 'Al Quoz', 'International City', 'Discovery Gardens', 'Jebel Ali', 'Al Nahda', 'Satwa', 'Al Rigga', 'Oud Metha', 'Al Garhoud', 'Dubai Creek Harbour', 'Bluewaters Island']
   },
-  GCC: ['Riyadh', 'Jeddah', 'Muscat', 'Doha', 'Manama', 'Kuwait City']
-};
+  {
+    name: 'Abu Dhabi',
+    areas: ['Al Reem Island', 'Khalifa City', 'Yas Island', 'Saadiyat Island', 'Mussafah', 'Masdar City', 'Al Raha']
+  },
+  {
+    name: 'Sharjah',
+    areas: ['Al Majaz', 'Al Nahda', 'Al Khan', 'Muwaileh', 'Industrial Area']
+  },
+  { name: 'Ajman', areas: ['Al Nuaimiya', 'Al Jurf'] },
+  { name: 'Ras Al Khaimah', areas: ['Al Marjan Island', 'Al Hamra Village'] },
+  { name: 'Fujairah', areas: ['Dibba', 'Al Faseel'] },
+  { name: 'Umm Al Quwain', areas: ['Old Town'] },
+  { name: 'Al Ain', areas: ['Al Jimi', 'Al Towayya'] }
+];
 
 const INDUSTRIES = [
   'Hotels', 'Restaurants', 'Cafes', 'Medical Clinics', 'Hospitals', 'Dentists',
   'Real Estate', 'Construction', 'Interior Designers', 'Architects', 'Gyms', 'Salons',
   'Spas', 'Car Showrooms', 'Law Firms', 'Accounting Firms', 'Travel Agencies',
-  'Education', 'Schools', 'Universities', 'IT Companies', 'Marketing Agencies',
-  'Ecommerce', 'Retail', 'Jewellery', 'Luxury Brands', 'Furniture', 'Manufacturing',
-  'Logistics', 'Freight', 'Shipping', 'Warehouses'
-];
-
-const SEARCH_EXAMPLES = [
-  'Hotels Dubai Marina', 'Luxury Hotels Downtown Dubai', 'Restaurants Business Bay',
-  'Dental Clinic Dubai', 'Gym JLT', 'Construction Company Abu Dhabi',
-  'Interior Designer Dubai', 'Architect Sharjah', 'Salon Al Barsha',
-  'Real Estate Palm Jumeirah', 'Cafe Dubai Hills', 'Hotel Abu Dhabi',
-  'Car Showroom Dubai', 'Marketing Agency Dubai', 'IT Company Abu Dhabi'
+  'Education', 'IT Companies', 'Marketing Agencies', 'Ecommerce', 'Retail',
+  'Jewellery', 'Luxury Brands', 'Furniture', 'Manufacturing', 'Logistics'
 ];
 
 export default function CompaniesPage() {
   const [query, setQuery] = useState('');
-  const [location, setLocation] = useState('');
+  const [city, setCity] = useState('Dubai');
+  const [area, setArea] = useState('');
   const [industry, setIndustry] = useState('');
-  const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [scouting, setScouting] = useState(false);
+  const [result, setResult] = useState<any>(null);
+
+  const selectedEmirate = UAE_EMIRATES.find(e => e.name === city);
 
   const handleSearch = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/companies?q=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}&industry=${encodeURIComponent(industry)}`);
-      const data = await res.json();
-      setResults(data.data || []);
-    } catch {
-      setResults([]);
-    }
-    setLoading(false);
-  };
-
-  const handleScout = async () => {
-    setScouting(true);
-    try {
-      const res = await fetch('/api/scout', {
+      const res = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, location, industry })
+        body: JSON.stringify({
+          query: query || industry,
+          country: 'UAE',
+          city,
+          area,
+          industry,
+          max_results: 50
+        })
       });
       const data = await res.json();
-      setResults(data.data || []);
+      setResult(data);
     } catch {
-      setResults([]);
+      setResult(null);
     }
-    setScouting(false);
+    setLoading(false);
   };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 p-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Company Discovery</h1>
-        <p className="text-muted-foreground mt-1">Find and scout businesses using AI-powered search</p>
+        <p className="text-muted-foreground mt-1">Find businesses and start analysis jobs</p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Search & Scout</CardTitle>
+          <CardTitle>Search & Discover</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex gap-4">
-            <div className="flex-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
               <label className="text-xs font-medium mb-1 block">Search Query</label>
               <Input
-                placeholder="e.g., Hotels Dubai Marina, Dental Clinic Dubai"
+                placeholder="e.g., Hotels, Dental Clinic, Real Estate"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSearch()}
               />
             </div>
-            <div className="w-48">
-              <label className="text-xs font-medium mb-1 block">Location</label>
-              <Select value={location} onValueChange={setLocation}>
-                <option value="">All Locations</option>
-                {Object.entries(LOCATIONS).map(([country, cities]) => (
-                  <optgroup key={country} label={country}>
-                    {Object.entries(cities).map(([emirate, areas]) => (
-                      <optgroup key={emirate} label={emirate}>
-                        {areas.map(area => <option key={area} value={area}>{area}</option>)}
-                      </optgroup>
-                    ))}
-                  </optgroup>
-                ))}
-              </Select>
-            </div>
-            <div className="w-56">
-              <label className="text-xs font-medium mb-1 block">Industry</label>
+            <div>
+              <label className="text-xs font-medium mb-1 block flex items-center gap-1">
+                <Briefcase className="h-3 w-3" /> Industry
+              </label>
               <Select value={industry} onValueChange={setIndustry}>
                 <option value="">All Industries</option>
                 {INDUSTRIES.map(ind => (
@@ -118,77 +104,67 @@ export default function CompaniesPage() {
               </Select>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={handleSearch} disabled={loading}>
-              <Search className="h-4 w-4 mr-2" /> Search
-            </Button>
-            <Button variant="secondary" onClick={handleScout} disabled={scouting}>
-              <Zap className="h-4 w-4 mr-2" /> AI Scout
-            </Button>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-medium mb-1 block flex items-center gap-1">
+                <MapPin className="h-3 w-3" /> City
+              </label>
+              <Select value={city} onValueChange={v => { setCity(v); setArea(''); }}>
+                {UAE_EMIRATES.map(e => (
+                  <option key={e.name} value={e.name}>{e.name}</option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Area</label>
+              <Select value={area} onValueChange={setArea}>
+                <option value="">All Areas</option>
+                {selectedEmirate?.areas.map(a => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </Select>
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <span className="text-xs text-muted-foreground mr-2">Quick searches:</span>
-            {SEARCH_EXAMPLES.map(example => (
-              <Badge
-                key={example}
-                variant="secondary"
-                className="cursor-pointer hover:bg-primary hover:text-primary-foreground"
-                onClick={() => { setQuery(example); handleSearch(); }}
-              >
-                {example}
-              </Badge>
-            ))}
+          <div className="flex gap-2">
+            <Button onClick={handleSearch} disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Starting Search...
+                </>
+              ) : (
+                <>
+                  <Search className="h-4 w-4 mr-2" /> Start Search
+                </>
+              )}
+            </Button>
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {results.map((result, index) => (
-          <motion.div key={index} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}>
-            <Card className="hover:shadow-md transition-shadow cursor-pointer">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <CardTitle className="text-base">{result.name}</CardTitle>
-                  {result.rating > 0 && (
-                    <Badge variant="warning">{result.rating} ⭐</Badge>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Globe className="h-3 w-3" />
-                  <span className="truncate">{result.website || 'No website'}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <MapPin className="h-3 w-3" />
-                  <span className="truncate">{result.address || result.location}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Briefcase className="h-3 w-3" />
-                  <span>{result.category || result.industry}</span>
-                </div>
-                {result.email && (
-                  <div className="text-sm text-primary">{result.email}</div>
-                )}
-                <div className="flex gap-2 pt-2">
-                  <Button size="sm" variant="outline" className="flex-1">
-                    <Globe className="h-3 w-3 mr-1" /> Analyze
-                  </Button>
-                  <Button size="sm" className="flex-1">
-                    <Search className="h-3 w-3 mr-1" /> Scout
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
-        {results.length === 0 && !loading && (
-          <div className="col-span-3 text-center py-12 text-muted-foreground">
-            Search for companies to discover leads
-          </div>
-        )}
-      </div>
+      {result && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Search Job Created</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm mb-4">
+              Job <strong>{result.data?.id?.slice(0, 8)}...</strong> has been queued.
+              Businesses will be discovered, websites scraped, and audited automatically.
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" href="/jobs">
+                View Jobs
+              </Button>
+              <Button variant="outline" size="sm" href="/leads">
+                View Leads
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </motion.div>
   );
 }
