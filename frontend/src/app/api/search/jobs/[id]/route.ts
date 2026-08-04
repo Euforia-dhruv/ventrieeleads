@@ -2,18 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+function getAuthHeaders(request: NextRequest): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const token = request.cookies.get('token')?.value;
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const authHeader = request.headers.get('authorization');
-    const cookieHeader = request.headers.get('cookie');
-
-    const headers: Record<string, string> = {};
-    if (authHeader) headers['authorization'] = authHeader;
-    if (cookieHeader) headers['cookie'] = cookieHeader;
+    const headers = getAuthHeaders(request);
 
     const res = await fetch(`${BACKEND_URL}/api/search/jobs/${id}`, { headers });
     const data = await res.json();

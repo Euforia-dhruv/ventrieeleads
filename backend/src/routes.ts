@@ -134,16 +134,16 @@ export function setupRoutes(): Router {
 
   // Public routes (no auth required)
   router.get('/locations/search', searchLocations);
+  router.post('/search', createSearchJob);
+  router.get('/search/jobs/:id', getSearchJob);
 
   router.use(authenticate);
 
   // Dashboard
   router.get('/dashboard/stats', leadStats);
 
-  // Search
-  router.post('/search', createSearchJob);
+  // Search (authenticated)
   router.get('/search/jobs', listSearchJobs);
-  router.get('/search/jobs/:id', getSearchJob);
   router.post('/search/jobs/:id/cancel', cancelSearchJob);
 
   // Leads CRUD
