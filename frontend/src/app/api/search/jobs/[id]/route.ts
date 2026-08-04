@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const BACKEND_URL = process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export async function GET(
   request: NextRequest,
@@ -8,7 +8,14 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const res = await fetch(`${BACKEND_URL}/api/search/jobs/${id}`);
+    const authHeader = request.headers.get('authorization');
+    const cookieHeader = request.headers.get('cookie');
+
+    const headers: Record<string, string> = {};
+    if (authHeader) headers['authorization'] = authHeader;
+    if (cookieHeader) headers['cookie'] = cookieHeader;
+
+    const res = await fetch(`${BACKEND_URL}/api/search/jobs/${id}`, { headers });
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
   } catch (error) {

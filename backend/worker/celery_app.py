@@ -112,6 +112,26 @@ app.conf.update(
             "task": "worker.tasks.modules.collect_system_metrics",
             "schedule": 300.0,
         },
+        "campaign-auto-schedule": {
+            "task": "worker.tasks.campaign_scheduler.check_and_run_due_campaigns",
+            "schedule": 300.0,
+        },
+        "auto-discover-unexplored": {
+            "task": "worker.tasks.campaign_scheduler.auto_discover_unexplored",
+            "schedule": crontab(hour=3, minute=0),
+        },
+        "provider-health-check": {
+            "task": "worker.tasks.provider_health.check_all_providers",
+            "schedule": 3600.0,
+        },
+        "provider-auto-disable": {
+            "task": "worker.tasks.provider_health.auto_disable_failing",
+            "schedule": 7200.0,
+        },
+        "provider-cleanup-metrics": {
+            "task": "worker.tasks.provider_health.cleanup_old_metrics",
+            "schedule": crontab(hour=4, minute=0),
+        },
     }
 )
 

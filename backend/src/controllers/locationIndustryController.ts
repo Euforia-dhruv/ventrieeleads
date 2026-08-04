@@ -4,6 +4,42 @@ import { logger } from '../core/logger';
 
 // ── LOCATIONS ──────────────────────────────────────────────────────────────────
 
+export async function searchLocations(req: Request, res: Response): Promise<void> {
+  try {
+    const pool = getPool();
+    const q = (req.query.q as string) || '';
+    const limit = parseInt(req.query.limit as string, 10) || 20;
+
+    if (q.length < 2) {
+      res.json({ locations: [] });
+      return;
+    }
+
+    const result = await pool.query(`
+      SELECT id, name, slug, location_type, parent_id, country_code,
+             latitude, longitude, timezone, population
+      FROM locations
+      WHERE is_deleted = false AND is_active = true
+        AND name ILIKE $1
+      ORDER BY
+        CASE location_type
+          WHEN 'city' THEN 1
+          WHEN 'state' THEN 2
+          WHEN 'country' THEN 3
+          ELSE 4
+        END,
+        population DESC NULLS LAST,
+        name ASC
+      LIMIT $2
+    `, [`%${q}%`, limit]);
+
+    res.json({ locations: result.rows });
+  } catch (error) {
+    logger.error('Error searching locations:', error);
+    res.status(500).json({ locations: [] });
+  }
+}
+
 export async function listLocations(req: Request, res: Response): Promise<void> {
   try {
     const pool = getPool();

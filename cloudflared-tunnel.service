@@ -8,6 +8,8 @@ Type=simple
 ExecStart=/usr/local/bin/cloudflared tunnel --url http://localhost:80
 Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

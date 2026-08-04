@@ -433,9 +433,12 @@ class Opportunity(BaseModel):
     total_min = Column(Integer, default=0)
     total_max = Column(Integer, default=0)
     confidence = Column(Float, default=0)
+    urgency = Column(String(20), default="medium")
     recommended_services = Column(JSONB, default=list)
     priority = Column(String(20), default="medium")
+    ai_notes = Column(Text)
     notes = Column(Text)
+    updated_by_ai_at = Column(DateTime)
 
     lead = relationship("Lead", backref="opportunity")
 

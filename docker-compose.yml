@@ -32,6 +32,7 @@ services:
       - "3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost/api
+      - BACKEND_INTERNAL_URL=http://backend:8000
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))\""]
       interval: 10s
@@ -137,6 +138,19 @@ services:
       - SCREENSHOTS_DIR=/app/data/screenshots
       - LOG_LEVEL=info
       - TIMEZONE=${TIMEZONE:-UTC}
+      # Provider API Keys (Free tiers)
+      - OUTSCRAPER_API_KEY=${OUTSCRAPER_API_KEY}
+      - APOLLO_API_KEY=${APOLLO_API_KEY}
+      - HUNTER_API_KEY=${HUNTER_API_KEY}
+      - APIFY_API_TOKEN=${APIFY_API_TOKEN}
+      - BUILTWITH_API_KEY=${BUILTWITH_API_KEY}
+      - WAPPALYZER_API_KEY=${WAPPALYZER_API_KEY}
+      - CALENDLY_API_KEY=${CALENDLY_API_KEY}
+      - LOOM_API_KEY=${LOOM_API_KEY}
+      # Browser
+      - LIGHTPANDA_URL=${LIGHTPANDA_URL:-http://lightpanda:8080}
+      - LIGHTPANDA_CDP_URL=${LIGHTPANDA_CDP_URL:-ws://lightpanda:9222}
+      - BROWSER_FALLBACK_CHAIN=${BROWSER_FALLBACK_CHAIN:-lightpanda,playwright,http}
     depends_on:
       postgres:
         condition: service_healthy
@@ -174,6 +188,19 @@ services:
       - AI_FALLBACK_ENABLED=${AI_FALLBACK_ENABLED:-true}
       - LOG_LEVEL=info
       - TIMEZONE=${TIMEZONE:-UTC}
+      # Provider API Keys (Free tiers)
+      - OUTSCRAPER_API_KEY=${OUTSCRAPER_API_KEY}
+      - APOLLO_API_KEY=${APOLLO_API_KEY}
+      - HUNTER_API_KEY=${HUNTER_API_KEY}
+      - APIFY_API_TOKEN=${APIFY_API_TOKEN}
+      - BUILTWITH_API_KEY=${BUILTWITH_API_KEY}
+      - WAPPALYZER_API_KEY=${WAPPALYZER_API_KEY}
+      - CALENDLY_API_KEY=${CALENDLY_API_KEY}
+      - LOOM_API_KEY=${LOOM_API_KEY}
+      # Browser
+      - LIGHTPANDA_URL=${LIGHTPANDA_URL:-http://lightpanda:8080}
+      - LIGHTPANDA_CDP_URL=${LIGHTPANDA_CDP_URL:-ws://lightpanda:9222}
+      - BROWSER_FALLBACK_CHAIN=${BROWSER_FALLBACK_CHAIN:-lightpanda,playwright,http}
     depends_on:
       postgres:
         condition: service_healthy

@@ -242,5 +242,37 @@ class AuditService:
         if not services: services.append("Website Maintenance & Growth")
         return services
 
+    async def ai_analysis(self, url: str, html: str, scores: Dict) -> Dict:
+        """Add AI-powered analysis to the audit."""
+        try:
+            from worker.services.ai_client import ai_client
+
+            text_preview = html[:3000] if html else ""
+
+            prompt = f"""Analyze this website for a web development agency audit.
+
+URL: {url}
+Scores: {scores}
+HTML preview: {text_preview}
+
+Provide:
+1. Top 3 UX/design issues with business impact
+2. Top 3 conversion blockers
+3. Specific recommendations (not generic)
+4. Estimated revenue impact of fixes
+5. One-paragraph executive summary
+
+Return as JSON:
+{{"ux_issues": [{{"issue": "...", "impact": "...", "fix": "..."}}], "conversion_blockers": ["..."], "executive_summary": "...", "estimated_impact": "..."}}"""
+
+            result = await ai_client.generate_json(prompt)
+            if result:
+                return {"ai_analysis": result}
+
+        except Exception as e:
+            logger.warning(f"AI analysis failed: {e}")
+
+        return {"ai_analysis": None}
+
 
 audit_service = AuditService()

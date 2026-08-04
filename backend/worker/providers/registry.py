@@ -1,19 +1,24 @@
-"""Plugin registry for managing and invoking providers."""
+"""Plugin registry for managing and invoking providers with auto-loading."""
 import logging
 import asyncio
-from typing import Dict, List, Optional, Type
+import importlib
+import pkgutil
+from pathlib import Path
+from typing import Dict, List, Optional, Type, Set
 from worker.providers.base import BaseProvider, NormalizedLead
 
 logger = logging.getLogger(__name__)
 
 
 class ProviderRegistry:
-    """Central registry for all lead providers."""
+    """Central registry for all lead providers with auto-discovery."""
 
     def __init__(self):
         self._providers: Dict[str, BaseProvider] = {}
         self._provider_classes: Dict[str, Type[BaseProvider]] = {}
+        self._enabled_slugs: Set[str] = set()
         self._initialized = False
+        self._auto_discovered = False
 
     def register(self, provider: BaseProvider) -> None:
         """Register a provider instance."""
@@ -23,6 +28,35 @@ class ProviderRegistry:
     def register_class(self, slug: str, cls: Type[BaseProvider]) -> None:
         """Register a provider class for lazy instantiation."""
         self._provider_classes[slug] = cls
+
+    def auto_discover(self) -> None:
+        """Auto-discover and register all providers in the providers package."""
+        if self._auto_discovered:
+            return
+
+        package_dir = Path(__file__).parent
+        for _, module_name, _ in pkgutil.iter_modules([str(package_dir)]):
+            if module_name.startswith("_") or module_name in ("base", "registry"):
+                continue
+
+            try:
+                module = importlib.import_module(f"worker.providers.{module_name}")
+                # Find all BaseProvider subclasses in the module
+                for attr_name in dir(module):
+                    attr = getattr(module, attr_name)
+                    if (
+                        isinstance(attr, type)
+                        and issubclass(attr, BaseProvider)
+                        and attr is not BaseProvider
+                        and hasattr(attr, "slug")
+                        and attr.slug != "base"
+                    ):
+                        self.register_class(attr.slug, attr)
+                        logger.info(f"Auto-discovered provider: {attr.slug} from {module_name}")
+            except Exception as e:
+                logger.error(f"Failed to auto-discover provider from {module_name}: {e}")
+
+        self._auto_discovered = True
 
     def get(self, slug: str) -> Optional[BaseProvider]:
         """Get a provider by slug."""
@@ -39,7 +73,7 @@ class ProviderRegistry:
         return list(self._providers.values())
 
     def list_active(self) -> List[BaseProvider]:
-        """List only enabled providers."""
+        """List only enabled and ready providers."""
         return [p for p in self._providers.values() if p.is_ready]
 
     def list_enabled_slugs(self) -> List[str]:
@@ -60,10 +94,22 @@ class ProviderRegistry:
             pass
         return ["google_maps"]
 
+    def set_enabled(self, slugs: List[str]) -> None:
+        """Set which providers are enabled."""
+        self._enabled_slugs = set(slugs)
+        for slug, provider in self._providers.items():
+            if slug in slugs:
+                provider.enable()
+            else:
+                provider.disable()
+
     async def initialize_all(self, enabled_slugs: List[str] = None) -> None:
         """Initialize all enabled providers."""
         if self._initialized:
             return
+
+        # Auto-discover providers first
+        self.auto_discover()
 
         if enabled_slugs is None:
             enabled_slugs = self.list_enabled_slugs()
@@ -97,7 +143,12 @@ class ProviderRegistry:
         if not provider.is_ready:
             await provider.initialize()
 
+        if not provider.is_enabled:
+            logger.warning(f"Provider {provider_slug} is disabled")
+            return []
+
         try:
+            provider._track_request()
             results = await provider.search(
                 query=query,
                 location=location,
@@ -109,6 +160,7 @@ class ProviderRegistry:
             logger.info(f"Provider {provider_slug} returned {len(results)} results")
             return results
         except Exception as e:
+            provider._track_error(str(e))
             logger.error(f"Provider {provider_slug} search failed: {e}")
             return []
 
@@ -137,7 +189,12 @@ class ProviderRegistry:
             if not provider.is_ready:
                 await provider.initialize()
 
+            if not provider.is_enabled:
+                logger.debug(f"Skipping disabled provider: {slug}")
+                continue
+
             try:
+                provider._track_request()
                 results = await provider.search(
                     query=query,
                     location=location,
@@ -149,6 +206,7 @@ class ProviderRegistry:
                 all_results.extend(results)
                 logger.info(f"Provider {slug}: {len(results)} results")
             except Exception as e:
+                provider._track_error(str(e))
                 logger.error(f"Provider {slug} failed: {e}")
                 continue
 
@@ -167,15 +225,44 @@ class ProviderRegistry:
     def get_provider_info(self) -> List[Dict]:
         """Get info about all registered providers."""
         return [
-            {
-                "name": p.name,
-                "slug": p.slug,
-                "description": p.description,
-                "requires_browser": p.requires_browser,
-                "is_ready": p.is_ready,
-            }
+            p.get_capabilities()
             for p in self._providers.values()
         ]
+
+    def get_provider_by_slug(self, slug: str) -> Optional[Dict]:
+        """Get detailed info about a specific provider."""
+        provider = self.get(slug)
+        if provider:
+            return provider.get_capabilities()
+        return None
+
+    async def health_check_all(self) -> Dict[str, bool]:
+        """Check health of all providers."""
+        results = {}
+        for slug, provider in self._providers.items():
+            try:
+                results[slug] = await provider.health_check()
+            except Exception as e:
+                logger.error(f"Health check failed for {slug}: {e}")
+                results[slug] = False
+        return results
+
+    async def get_stats(self) -> Dict:
+        """Get aggregate stats from all providers."""
+        total_requests = 0
+        total_errors = 0
+        for provider in self._providers.values():
+            info = provider.get_rate_limit_info()
+            total_requests += info["total_requests"]
+            total_errors += info["error_count"]
+
+        return {
+            "total_providers": len(self._providers),
+            "active_providers": len(self.list_active()),
+            "enabled_slugs": list(self._enabled_slugs),
+            "total_requests": total_requests,
+            "total_errors": total_errors,
+        }
 
 
 # Global registry instance

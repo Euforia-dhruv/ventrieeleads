@@ -58,7 +58,7 @@ import {
   getAgentEvents, getQualityMetrics, getAgentHealthSummary
 } from './controllers/agentController';
 import {
-  listLocations, getLocationTree, createLocation, updateLocation, deleteLocation,
+  searchLocations, listLocations, getLocationTree, createLocation, updateLocation, deleteLocation,
   getLocationsByCountry,
   listIndustries, getIndustryTree, createIndustry, updateIndustry, deleteIndustry
 } from './controllers/locationIndustryController';
@@ -131,6 +131,10 @@ export function setupRoutes(): Router {
 
   // ── Protected routes ───────────────────────────────────────
   // All routes below require authentication via JWT or API key
+
+  // Public routes (no auth required)
+  router.get('/locations/search', searchLocations);
+
   router.use(authenticate);
 
   // Dashboard
@@ -321,6 +325,7 @@ export function setupRoutes(): Router {
   router.post('/intelligence/search', intelligentSearch);
 
   // Global Location Hierarchy
+  router.get('/locations/search', searchLocations);
   router.get('/locations', listLocations);
   router.get('/locations/tree', getLocationTree);
   router.get('/locations/country/:countryCode', getLocationsByCountry);

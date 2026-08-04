@@ -1,6 +1,6 @@
-"""Lead scoring algorithm."""
+"""Lead scoring algorithm with AI enhancement."""
 import logging
-from typing import Dict
+from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,9 @@ class LeadScoringService:
         has_whatsapp: bool = False,
         tech_count: int = 0,
         social_count: int = 0,
-        industry: str = ""
+        industry: str = "",
+        audit_issues: list = None,
+        description: str = "",
     ) -> Dict:
         """Calculate lead score 0-100."""
         score = 0.0
@@ -94,8 +96,78 @@ class LeadScoringService:
         else:
             label = "cold"
 
+        # Calculate sub-scores for reporting
+        website_quality = min(100, website_score)
+        contact_score = sum([has_website, has_email, has_phone, has_whatsapp]) * 25
+        tech_presence = min(100, (tech_count * 15) + (social_count * 10))
+        reputation = min(100, (min(review_count / 100, 1) * 50) + (min(rating / 5, 1) * 50))
+        opportunity_score = self._calculate_opportunity_score(
+            website_score, review_count, rating, has_website, has_email,
+            has_phone, has_whatsapp, tech_count, social_count, industry,
+            audit_issues or []
+        )
+
         logger.info(f"Lead score: {score} ({label})")
-        return {"score": score, "label": label}
+        return {
+            "score": score,
+            "label": label,
+            "website_quality": round(website_quality),
+            "contact_score": round(contact_score),
+            "tech_presence": round(tech_presence),
+            "reputation": round(reputation),
+            "opportunity_score": round(opportunity_score),
+        }
+
+    def _calculate_opportunity_score(
+        self,
+        website_score: int,
+        review_count: int,
+        rating: float,
+        has_website: bool,
+        has_email: bool,
+        has_phone: bool,
+        has_whatsapp: bool,
+        tech_count: int,
+        social_count: int,
+        industry: str,
+        issues: list,
+    ) -> float:
+        """Calculate opportunity score - how much work they need (higher = more opportunity)."""
+        opp = 0.0
+
+        # Bad website = big opportunity
+        if website_score < 30:
+            opp += 30
+        elif website_score < 50:
+            opp += 20
+        elif website_score < 70:
+            opp += 10
+
+        # Missing basics = opportunity
+        if not has_website:
+            opp += 20
+        if not has_email:
+            opp += 10
+        if not has_phone:
+            opp += 5
+        if not has_whatsapp:
+            opp += 5
+
+        # Low tech = opportunity
+        if tech_count == 0:
+            opp += 15
+        elif tech_count < 3:
+            opp += 8
+
+        # Many issues = opportunity
+        opp += min(len(issues) * 3, 20)
+
+        # High-value industry with bad presence = high opportunity
+        industry_lower = industry.lower().strip()
+        if industry_lower in self.HIGH_VALUE_INDUSTRIES and website_score < 50:
+            opp += 15
+
+        return min(100, opp)
 
 
 lead_scorer = LeadScoringService()

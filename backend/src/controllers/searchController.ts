@@ -153,7 +153,40 @@ export async function getSearchJob(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    res.json({ success: true, data: result.rows[0] });
+    const job = result.rows[0];
+
+    if (job.status === 'completed' || job.status === 'failed') {
+      const resultsQuery = await pool.query(`
+        SELECT
+          c.id, c.name, c.website, c.phone, c.email, c.industry,
+          c.city, c.country, c.area, c.address,
+          c.rating, c.review_count, c.logo_url, c.source,
+          c.latitude, c.longitude,
+          c.google_maps_url, c.description,
+          c.twitter, c.tiktok, c.snapchat,
+          c.employee_count, c.founded_year,
+          (c.metadata->>'lead_score')::int as lead_score,
+          (c.metadata->>'website_score')::int as website_score,
+          (c.metadata->>'seo_score')::int as seo_score,
+          (c.metadata->>'design_score')::int as design_score,
+          (c.metadata->>'opportunity_score')::int as opportunity_score,
+          c.metadata->>'ai_recommendation' as ai_recommendation,
+          jsonb_build_object(
+            'linkedin', c.metadata->>'linkedin_url',
+            'instagram', c.metadata->>'instagram_url',
+            'facebook', c.metadata->>'facebook_url',
+            'twitter', c.twitter
+          ) as social_links
+        FROM search_results sr
+        JOIN companies c ON sr.company_id = c.id
+        WHERE sr.search_job_id = $1 AND sr.is_duplicate = false AND c.is_deleted = false
+        ORDER BY (c.metadata->>'lead_score')::int DESC NULLS LAST
+      `, [id]);
+
+      job.results = resultsQuery.rows;
+    }
+
+    res.json({ success: true, data: job });
   } catch (error) {
     logger.error('Error fetching search job:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch search job' });

@@ -1,254 +1,362 @@
 'use client';
 
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Search, MapPin, Briefcase, Building2, Star, Hash, ArrowRight, Loader2 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
+import { useState, useEffect } from 'react';
+import { Search, Sparkles, Zap, Globe, Building2, ArrowRight, Clock, TrendingUp } from 'lucide-react';
+import LocationPicker from '@/components/search/LocationPicker';
+import IndustryPicker from '@/components/search/IndustryPicker';
+import SearchProgress from '@/components/search/SearchProgress';
+import SearchResults from '@/components/search/SearchResults';
+import FilterSidebar from '@/components/search/FilterSidebar';
 
-const UAE_EMIRATES = [
-  {
-    name: 'Dubai',
-    areas: ['Downtown Dubai', 'Business Bay', 'Dubai Marina', 'Jumeirah', 'Palm Jumeirah', 'Deira', 'Bur Dubai', 'JLT', 'Al Barsha', 'Silicon Oasis', 'Internet City', 'Media City', 'Design District', 'Healthcare City', 'Motor City', 'Arabian Ranches', 'Dubai Hills', 'Mirdif', 'Al Quoz', 'International City', 'Discovery Gardens', 'Jebel Ali', 'Al Nahda', 'Satwa', 'Al Rigga', 'Oud Metha', 'Al Garhoud', 'Dubai Creek Harbour', 'Bluewaters Island']
-  },
-  {
-    name: 'Abu Dhabi',
-    areas: ['Al Reem Island', 'Khalifa City', 'Yas Island', 'Saadiyat Island', 'Mussafah', 'Masdar City', 'Al Raha', 'Corniche', 'Tourist Club Area', 'Al Maryah Island']
-  },
-  {
-    name: 'Sharjah',
-    areas: ['Al Majaz', 'Al Nahda', 'Al Khan', 'Muwaileh', 'Industrial Area', 'Al Qasimia', 'Al Taawun', 'Al Mamzar']
-  },
-  { name: 'Ajman', areas: ['Al Nuaimiya', 'Al Jurf', 'Al Rashidiya', 'Emirates City'] },
-  { name: 'Ras Al Khaimah', areas: ['Al Marjan Island', 'Al Hamra Village', 'Dafan Al Khor'] },
-  { name: 'Fujairah', areas: ['Dibba', 'Al Faseel', 'City Centre'] },
-  { name: 'Umm Al Quwain', areas: ['Old Town', 'Al Salamah'] },
-  { name: 'Al Ain', areas: ['Al Jimi', 'Al Towayya', 'Al Mutawaa', 'Zakher'] }
-];
+interface SearchResult {
+  id: string;
+  name: string;
+  website?: string;
+  phone?: string;
+  email?: string;
+  industry?: string;
+  city?: string;
+  country?: string;
+  rating?: number;
+  review_count?: number;
+  logo_url?: string;
+  description?: string;
+  social_links?: Record<string, string>;
+  lead_score?: number;
+  website_score?: number;
+  seo_score?: number;
+  design_score?: number;
+  opportunity_score?: number;
+  ai_recommendation?: string;
+}
 
-const INDUSTRIES = [
-  'Hotels', 'Restaurants', 'Cafes', 'Medical Clinics', 'Hospitals', 'Dentists',
-  'Real Estate', 'Construction', 'Interior Designers', 'Architects', 'Gyms', 'Salons',
-  'Spas', 'Car Showrooms', 'Law Firms', 'Accounting Firms', 'Travel Agencies',
-  'Education', 'IT Companies', 'Marketing Agencies', 'Ecommerce', 'Retail',
-  'Jewellery', 'Luxury Brands', 'Furniture', 'Manufacturing', 'Logistics'
-];
+interface FilterState {
+  country: string;
+  city: string;
+  industry: string;
+  minRating: number;
+  minWebsiteScore: number;
+  minLeadScore: number;
+  minOppScore: number;
+  hasEmail: boolean;
+  hasPhone: boolean;
+  hasWhatsApp: boolean;
+  hasInstagram: boolean;
+  hasLinkedIn: boolean;
+  hasFacebook: boolean;
+  hasWebsite: boolean;
+  noWebsite: boolean;
+}
 
-const QUICK_SEARCHES = [
-  { label: 'Hotels Dubai Marina', query: 'Hotels', city: 'Dubai', area: 'Dubai Marina', industry: 'Hotels' },
-  { label: 'Restaurants Business Bay', query: 'Restaurants', city: 'Dubai', area: 'Business Bay', industry: 'Restaurants' },
-  { label: 'Dental Clinics Dubai', query: 'Dental Clinic', city: 'Dubai', area: '', industry: 'Dentists' },
-  { label: 'Real Estate Downtown', query: 'Real Estate', city: 'Dubai', area: 'Downtown Dubai', industry: 'Real Estate' },
-  { label: 'Gyms JLT', query: 'Gym', city: 'Dubai', area: 'JLT', industry: 'Gyms' },
-  { label: 'Construction Abu Dhabi', query: 'Construction', city: 'Abu Dhabi', area: '', industry: 'Construction' },
+const EXAMPLES = [
+  { text: 'Dentists in London', icon: '🦷' },
+  { text: 'Restaurants near Berlin', icon: '🍽️' },
+  { text: 'Hotels in Tokyo', icon: '🏨' },
+  { text: 'Real Estate Dubai', icon: '🏢' },
+  { text: 'Construction companies Toronto', icon: '🏗️' },
+  { text: 'Marketing agencies New York', icon: '📈' },
+  { text: 'Gyms Paris', icon: '💪' },
+  { text: 'Law firms Sydney', icon: '⚖️' },
 ];
 
 export default function SearchPage() {
   const [query, setQuery] = useState('');
-  const [city, setCity] = useState('Dubai');
-  const [area, setArea] = useState('');
-  const [industry, setIndustry] = useState('');
-  const [keyword, setKeyword] = useState('');
+  const [location, setLocation] = useState<{ country?: string; state?: string; city?: string; query: string }>({ query: '' });
+  const [industries, setIndustries] = useState<string[]>([]);
   const [maxResults, setMaxResults] = useState(50);
   const [minRating, setMinRating] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
 
-  const selectedEmirate = UAE_EMIRATES.find(e => e.name === city);
+  const [searching, setSearching] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
+
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState<FilterState>({
+    country: '', city: '', industry: '',
+    minRating: 0, minWebsiteScore: 0, minLeadScore: 0, minOppScore: 0,
+    hasEmail: false, hasPhone: false, hasWhatsApp: false,
+    hasInstagram: false, hasLinkedIn: false, hasFacebook: false,
+    hasWebsite: false, noWebsite: false,
+  });
+
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('recentSearches');
+    if (saved) setRecentSearches(JSON.parse(saved));
+  }, []);
 
   const handleSearch = async () => {
-    setLoading(true);
+    if (!query.trim() && industries.length === 0) return;
+
+    setSearching(true);
+    setHasSearched(true);
+    setProgress(0);
+    setResults([]);
+
+    const searchQuery = query || industries.join(', ');
+    const fullQuery = location.query
+      ? `${searchQuery} in ${location.query}`
+      : searchQuery;
+
+    // Save to recent searches
+    const updated = [fullQuery, ...recentSearches.filter(s => s !== fullQuery)].slice(0, 5);
+    setRecentSearches(updated);
+    localStorage.setItem('recentSearches', JSON.stringify(updated));
+
+    // Simulate progress steps
+    const steps = 10;
+    for (let i = 0; i < steps; i++) {
+      await new Promise(r => setTimeout(r, 500 + Math.random() * 1000));
+      setProgress(i);
+    }
+
     try {
       const res = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: query || `${industry} ${keyword}`.trim(),
-          country: 'UAE',
-          city,
-          area,
-          industry,
-          keyword,
+          query: fullQuery,
+          country: location.country || filters.country,
+          city: location.city || filters.city,
+          industry: industries[0] || filters.industry,
+          keyword: query,
           max_results: maxResults,
-          min_rating: minRating
-        })
+          min_rating: minRating,
+        }),
       });
-      const data = await res.json();
-      setResult(data);
+
+      if (res.ok) {
+        const json = await res.json();
+        const body = json.data || json;
+        if (body.results) {
+          setResults(body.results);
+        } else if (body.id) {
+          await pollJobResults(body.id);
+        }
+      }
     } catch (err) {
       console.error('Search failed:', err);
+    } finally {
+      setSearching(false);
     }
-    setLoading(false);
   };
 
+  const pollJobResults = async (jobId: string) => {
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        const res = await fetch(`/api/search/jobs/${jobId}`);
+        if (res.ok) {
+          const json = await res.json();
+          const job = json.data || json;
+          if (job.status === 'completed' && job.results) {
+            setResults(job.results);
+            return;
+          }
+          if (job.status === 'failed') {
+            console.error('Search failed:', job.error_message);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Poll failed:', err);
+      }
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSearch();
+    }
+  };
+
+  // Apply client-side filters
+  const filteredResults = results.filter(r => {
+    if (filters.country && r.country?.toLowerCase() !== filters.country.toLowerCase()) return false;
+    if (filters.city && r.city?.toLowerCase() !== filters.city.toLowerCase()) return false;
+    if (filters.industry && !r.industry?.toLowerCase().includes(filters.industry.toLowerCase())) return false;
+    if (filters.minRating && (r.rating || 0) < filters.minRating) return false;
+    if (filters.minWebsiteScore && (r.website_score || 0) < filters.minWebsiteScore) return false;
+    if (filters.minLeadScore && (r.lead_score || 0) < filters.minLeadScore) return false;
+    if (filters.hasEmail && !r.email) return false;
+    if (filters.hasPhone && !r.phone) return false;
+    if (filters.hasLinkedIn && !r.social_links?.linkedin) return false;
+    if (filters.hasInstagram && !r.social_links?.instagram) return false;
+    if (filters.hasFacebook && !r.social_links?.facebook) return false;
+    if (filters.hasWebsite && !r.website) return false;
+    if (filters.noWebsite && r.website) return false;
+    return true;
+  });
+
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 p-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Search Businesses</h1>
-        <p className="text-muted-foreground mt-1">Discover businesses across the UAE</p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      {/* Hero Search Section */}
+      <div className="relative">
+        <div className="absolute inset-0 bg-gradient-to-b from-blue-500/5 via-transparent to-transparent" />
+        <div className="relative max-w-4xl mx-auto px-4 pt-12 pb-8">
+          <div className="text-center mb-8">
+            <h1 className="text-4xl md:text-5xl font-bold text-white mb-3">
+              Discover <span className="gradient-text">any business</span> worldwide
+            </h1>
+            <p className="text-lg text-slate-400">
+              Find, analyze, and connect with companies anywhere in the world
+            </p>
+          </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Search className="h-5 w-5" />
-            Search Configuration
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-medium mb-1 block">Search Query</label>
-              <Input
-                placeholder="e.g., Hotels, Dental Clinic, Real Estate"
+          {/* Main Search Bar */}
+          <div className="glass-card rounded-2xl p-4 space-y-3">
+            {/* Query Input */}
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                type="text"
                 value={query}
-                onChange={e => setQuery(e.target.value)}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="What are you looking for? Try &quot;Dentists in London&quot;"
+                className="w-full h-14 pl-12 pr-4 bg-slate-900/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all text-lg"
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                <span className="flex items-center gap-1 px-2 py-1 bg-slate-800/50 rounded-lg text-xs text-slate-400">
+                  <Sparkles className="w-3 h-3" />
+                  AI-powered
+                </span>
+              </div>
+            </div>
+
+            {/* Location + Industry Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <LocationPicker
+                value={location.query}
+                onChange={setLocation}
+                placeholder="Location (optional)"
+              />
+              <IndustryPicker
+                value={industries}
+                onChange={setIndustries}
+                placeholder="Industry (optional)"
               />
             </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Keyword (Optional)</label>
-              <Input
-                placeholder="e.g., luxury, modern, 24/7"
-                value={keyword}
-                onChange={e => setKeyword(e.target.value)}
-              />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-xs font-medium mb-1 block flex items-center gap-1">
-                <MapPin className="h-3 w-3" /> City / Emirate
-              </label>
-              <Select value={city} onValueChange={v => { setCity(v); setArea(''); }}>
-                {UAE_EMIRATES.map(e => (
-                  <option key={e.name} value={e.name}>{e.name}</option>
-                ))}
-              </Select>
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Area</label>
-              <Select value={area} onValueChange={setArea}>
-                <option value="">All Areas</option>
-                {selectedEmirate?.areas.map(a => (
-                  <option key={a} value={a}>{a}</option>
-                ))}
-              </Select>
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block flex items-center gap-1">
-                <Briefcase className="h-3 w-3" /> Industry
-              </label>
-              <Select value={industry} onValueChange={setIndustry}>
-                <option value="">All Industries</option>
-                {INDUSTRIES.map(i => (
-                  <option key={i} value={i}>{i}</option>
-                ))}
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-medium mb-1 block flex items-center gap-1">
-                <Hash className="h-3 w-3" /> Max Results
-              </label>
-              <Select value={maxResults.toString()} onValueChange={v => setMaxResults(parseInt(v))}>
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-                <option value="200">200</option>
-              </Select>
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block flex items-center gap-1">
-                <Star className="h-3 w-3" /> Minimum Rating
-              </label>
-              <Select value={minRating.toString()} onValueChange={v => setMinRating(parseFloat(v))}>
-                <option value="0">Any Rating</option>
-                <option value="3">3+ Stars</option>
-                <option value="3.5">3.5+ Stars</option>
-                <option value="4">4+ Stars</option>
-                <option value="4.5">4.5+ Stars</option>
-              </Select>
-            </div>
-          </div>
-
-          <div className="flex gap-2">
-            <Button onClick={handleSearch} disabled={loading} size="lg">
-              {loading ? (
+            {/* Search Button */}
+            <button
+              onClick={handleSearch}
+              disabled={searching || (!query.trim() && industries.length === 0)}
+              className="w-full h-12 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-500 text-white rounded-xl font-medium transition-all flex items-center justify-center gap-2"
+            >
+              {searching ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Starting Search...
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Searching...
                 </>
               ) : (
                 <>
-                  <Search className="h-4 w-4 mr-2" />
-                  Start Search
-                  <ArrowRight className="h-4 w-4 ml-2" />
+                  <Zap className="w-4 h-4" />
+                  Search Companies
                 </>
               )}
-            </Button>
+            </button>
           </div>
 
-          <div className="flex flex-wrap gap-2 pt-2 border-t">
-            <span className="text-xs text-muted-foreground mr-2">Quick searches:</span>
-            {QUICK_SEARCHES.map(qs => (
-              <Badge
-                key={qs.label}
-                variant="secondary"
-                className="cursor-pointer hover:bg-primary hover:text-primary-foreground"
-                onClick={() => {
-                  setQuery(qs.query);
-                  setCity(qs.city);
-                  setArea(qs.area);
-                  setIndustry(qs.industry);
-                }}
-              >
-                {qs.label}
-              </Badge>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {result && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Search Job Created</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <p className="text-sm">
-                <span className="font-medium">Job ID:</span> {result.data?.id}
-              </p>
-              <p className="text-sm">
-                <span className="font-medium">Status:</span>{' '}
-                <Badge variant={result.data?.status === 'queued' ? 'secondary' : 'success'}>
-                  {result.data?.status}
-                </Badge>
-              </p>
-              <p className="text-sm">
-                <span className="font-medium">Query:</span> {result.data?.query}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                The search is running in the background. Go to the Jobs page to track progress.
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.location.href = '/jobs'}
-              >
-                View Jobs
-              </Button>
+          {/* Quick Examples */}
+          {!hasSearched && (
+            <div className="mt-6 text-center">
+              <p className="text-sm text-slate-500 mb-3">Try these examples:</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {EXAMPLES.map((ex) => (
+                  <button
+                    key={ex.text}
+                    onClick={() => {
+                      setQuery(ex.text);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/30 hover:bg-slate-800/50 border border-slate-700/30 rounded-lg text-sm text-slate-400 hover:text-white transition-all"
+                  >
+                    <span>{ex.icon}</span>
+                    {ex.text}
+                  </button>
+                ))}
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          )}
+
+          {/* Recent Searches */}
+          {!hasSearched && recentSearches.length > 0 && (
+            <div className="mt-4 text-center">
+              <p className="text-xs text-slate-600 mb-2">Recent</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {recentSearches.map((search) => (
+                  <button
+                    key={search}
+                    onClick={() => setQuery(search)}
+                    className="flex items-center gap-1 px-2 py-1 bg-slate-800/20 rounded-lg text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                  >
+                    <Clock className="w-3 h-3" />
+                    {search}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Progress */}
+      {searching && (
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <SearchProgress currentStep={progress} />
+        </div>
       )}
-    </motion.div>
+
+      {/* Results */}
+      {hasSearched && !searching && (
+        <div className="flex">
+          {/* Filters */}
+          <FilterSidebar
+            filters={filters}
+            onChange={setFilters}
+            isOpen={filtersOpen}
+            onToggle={() => setFiltersOpen(!filtersOpen)}
+          />
+
+          {/* Results */}
+          <div className="flex-1 px-4 pb-12">
+            <div className="max-w-5xl mx-auto">
+              <SearchResults
+                results={filteredResults}
+                onSelect={(company) => {
+                  window.location.href = `/companies/${company.id}`;
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!hasSearched && !searching && (
+        <div className="max-w-4xl mx-auto px-4 py-12">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="glass-card rounded-xl p-6 text-center">
+              <Globe className="w-8 h-8 text-blue-400 mx-auto mb-3" />
+              <h3 className="text-white font-medium mb-1">Global Coverage</h3>
+              <p className="text-sm text-slate-400">Search 195+ countries and 10,000+ cities</p>
+            </div>
+            <div className="glass-card rounded-xl p-6 text-center">
+              <Building2 className="w-8 h-8 text-purple-400 mx-auto mb-3" />
+              <h3 className="text-white font-medium mb-1">19 Free Providers</h3>
+              <p className="text-sm text-slate-400">Google Maps, Clutch, Apollo, and more</p>
+            </div>
+            <div className="glass-card rounded-xl p-6 text-center">
+              <Sparkles className="w-8 h-8 text-green-400 mx-auto mb-3" />
+              <h3 className="text-white font-medium mb-1">AI-Powered</h3>
+              <p className="text-sm text-slate-400">Automatic scoring, audit, and outreach</p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

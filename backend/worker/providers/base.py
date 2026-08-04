@@ -2,7 +2,7 @@
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, asdict
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Set
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -46,22 +46,47 @@ class BaseProvider(ABC):
     description: str = ""
     requires_browser: bool = False
     requires_api_key: bool = False
+    requires_auth: bool = False
     supported_countries: List[str] = ["*"]
     supported_cities: List[str] = []
+    supported_industries: List[str] = ["*"]
+
+    # Rate limiting
+    requests_per_minute: int = 30
+    requests_per_hour: int = 500
+    requests_per_day: int = 5000
+
+    # Pricing (0 = free, -1 = custom)
+    pricing_tier: str = "free"  # free, freemium, paid, custom
+    pricing_per_request: float = 0.0
 
     def __init__(self, config: Dict = None):
         self.config = config or {}
         self._is_initialized = False
+        self._is_enabled = True
+        self._request_count: int = 0
+        self._last_request_time: Optional[datetime] = None
+        self._error_count: int = 0
+        self._last_error: Optional[str] = None
 
     @property
     def is_ready(self) -> bool:
-        return self._is_initialized
+        return self._is_initialized and self._is_enabled
+
+    @property
+    def is_enabled(self) -> bool:
+        return self._is_enabled
 
     async def initialize(self) -> bool:
         """One-time initialization. Override if needed."""
         self._is_initialized = True
         logger.info(f"Provider {self.slug} initialized")
         return True
+
+    async def cleanup(self) -> None:
+        """Cleanup resources."""
+        self._is_initialized = False
+        logger.info(f"Provider {self.slug} cleaned up")
 
     @abstractmethod
     async def search(
@@ -80,9 +105,82 @@ class BaseProvider(ABC):
         """Get detailed info about a specific company. Optional."""
         return None
 
+    async def enrich(self, lead: NormalizedLead) -> NormalizedLead:
+        """Enrich an existing lead with more data. Override if supported."""
+        return lead
+
     async def validate(self, config: Dict = None) -> bool:
         """Validate that this provider can operate with current config."""
+        if self.requires_api_key and not self.config.get("api_key"):
+            logger.warning(f"Provider {self.slug} requires API key")
+            return False
         return True
+
+    async def health_check(self) -> bool:
+        """Check if the provider is healthy and responding."""
+        try:
+            if not self._is_initialized:
+                await self.initialize()
+            return True
+        except Exception as e:
+            logger.error(f"Provider {self.slug} health check failed: {e}")
+            return False
+
+    def get_rate_limit_info(self) -> Dict[str, Any]:
+        """Get current rate limit status."""
+        return {
+            "requests_per_minute": self.requests_per_minute,
+            "requests_per_hour": self.requests_per_hour,
+            "requests_per_day": self.requests_per_day,
+            "total_requests": self._request_count,
+            "error_count": self._error_count,
+            "last_error": self._last_error,
+        }
+
+    def get_pricing_info(self) -> Dict[str, Any]:
+        """Get pricing information."""
+        return {
+            "tier": self.pricing_tier,
+            "per_request": self.pricing_per_request,
+        }
+
+    def get_capabilities(self) -> Dict[str, Any]:
+        """Get provider capabilities."""
+        return {
+            "name": self.name,
+            "slug": self.slug,
+            "description": self.description,
+            "requires_browser": self.requires_browser,
+            "requires_api_key": self.requires_api_key,
+            "requires_auth": self.requires_auth,
+            "supported_countries": self.supported_countries,
+            "supported_cities": self.supported_cities,
+            "supported_industries": self.supported_industries,
+            "pricing": self.get_pricing_info(),
+            "rate_limits": self.get_rate_limit_info(),
+            "is_ready": self.is_ready,
+            "is_enabled": self.is_enabled,
+        }
+
+    def enable(self) -> None:
+        """Enable this provider."""
+        self._is_enabled = True
+        logger.info(f"Provider {self.slug} enabled")
+
+    def disable(self) -> None:
+        """Disable this provider."""
+        self._is_enabled = False
+        logger.info(f"Provider {self.slug} disabled")
+
+    def _track_request(self) -> None:
+        """Track a request for rate limiting."""
+        self._request_count += 1
+        self._last_request_time = datetime.utcnow()
+
+    def _track_error(self, error: str) -> None:
+        """Track an error."""
+        self._error_count += 1
+        self._last_error = error
 
     def normalize(self, raw_data: Dict) -> NormalizedLead:
         """Override to provide custom normalization logic."""
