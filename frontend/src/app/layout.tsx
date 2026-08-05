@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Search, Users, Briefcase, Settings, Menu, X, Zap,
-  Building2, LogOut, User, ChevronRight
+  Building2, LogOut, User
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
@@ -20,14 +20,6 @@ const navItems = [
   { href: '/campaigns', label: 'Campaigns', icon: Briefcase },
   { href: '/reports', label: 'Reports', icon: Briefcase },
   { href: '/settings', label: 'Settings', icon: Settings },
-];
-
-const advancedItems = [
-  { href: '/admin', label: 'Admin' },
-  { href: '/audit', label: 'Website Audit' },
-  { href: '/jobs', label: 'Search Jobs' },
-  { href: '/scheduled', label: 'Scheduled' },
-  { href: '/export', label: 'Export' },
 ];
 
 function AppShell({ children }: { children: React.ReactNode }) {
@@ -83,27 +75,6 @@ function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
-
-          {/* Advanced section */}
-          <div className="pt-4 pb-2 px-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[hsl(215,16%,35%)]">Advanced</p>
-          </div>
-          {advancedItems.map(item => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setSidebarOpen(false)}
-              className={cn(
-                "flex items-center justify-between px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all",
-                pathname === item.href
-                  ? "bg-white/[0.06] text-white"
-                  : "text-[hsl(215,16%,35%)] hover:bg-white/[0.03] hover:text-[hsl(215,20%,50%)]"
-              )}
-            >
-              {item.label}
-              <ChevronRight className="w-3 h-3 opacity-40" />
-            </Link>
-          ))}
         </nav>
 
         {/* User section */}

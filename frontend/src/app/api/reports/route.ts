@@ -1,26 +1,37 @@
-const BACKEND = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET() {
+const BACKEND_URL = process.env.BACKEND_INTERNAL_URL || process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+function getAuthHeaders(request: NextRequest): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = request.cookies.get('token')?.value;
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
+
+export async function GET(request: NextRequest) {
   try {
-    const res = await fetch(`${BACKEND}/api/reports`);
+    const headers = getAuthHeaders(request);
+    const res = await fetch(`${BACKEND_URL}/api/reports`, { headers });
     const data = await res.json();
-    return Response.json(data);
+    return NextResponse.json(data, { status: res.status });
   } catch {
-    return Response.json([]);
+    return NextResponse.json({ success: true, data: [] });
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const res = await fetch(`${BACKEND}/api/reports`, {
+    const headers = getAuthHeaders(request);
+    const res = await fetch(`${BACKEND_URL}/api/reports`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
     });
     const data = await res.json();
-    return Response.json(data);
+    return NextResponse.json(data, { status: res.status });
   } catch {
-    return Response.json({ error: 'Failed' }, { status: 500 });
+    return NextResponse.json({ success: false, message: 'Failed to generate report' }, { status: 500 });
   }
 }

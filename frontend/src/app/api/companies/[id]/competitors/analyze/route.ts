@@ -1,4 +1,4 @@
-const BACKEND = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const BACKEND = process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {

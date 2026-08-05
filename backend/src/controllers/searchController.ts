@@ -155,7 +155,7 @@ export async function getSearchJob(req: Request, res: Response): Promise<void> {
 
     const job = result.rows[0];
 
-    if (job.status === 'completed' || job.status === 'failed') {
+    if (job.status === 'completed' || job.status === 'failed' || job.status === 'running') {
       const resultsQuery = await pool.query(`
         SELECT
           c.id, c.name, c.website, c.phone, c.email, c.industry,
@@ -184,6 +184,7 @@ export async function getSearchJob(req: Request, res: Response): Promise<void> {
       `, [id]);
 
       job.results = resultsQuery.rows;
+      job.results_count = resultsQuery.rows.length;
     }
 
     res.json({ success: true, data: job });
