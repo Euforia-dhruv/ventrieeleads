@@ -1,59 +1,33 @@
 'use client';
 
-import './globals.css';
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Search, Users, Briefcase, Settings, Menu, X, Zap,
-  Calendar, Bell, FileDown, Shield, Building2,
-  Eye, FileText, Wand2, BarChart3, Lightbulb, Target,
-  Bot, Brain, Network, Globe, Factory, Rocket, Map, HeartPulse, Sparkles,
-  GitBranch, Coffee, Activity, LogOut, User
+  Building2, LogOut, User, ChevronRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { CommandBar } from '@/components/ai/CommandBar';
-import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
+import { Toaster } from '@/components/ui/toaster';
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/executive', label: 'Executive', icon: BarChart3 },
-  { href: '/agents', label: 'AI Agents', icon: Bot },
-  { href: '/intelligence', label: 'Intelligence', icon: Brain },
-  { href: '/insights', label: 'Insights', icon: Lightbulb },
-  { href: '/knowledge', label: 'Knowledge', icon: Network },
   { href: '/search', label: 'Search', icon: Search },
   { href: '/leads', label: 'Leads', icon: Users },
-  { href: '/campaigns', label: 'Campaigns', icon: Briefcase },
   { href: '/companies', label: 'Companies', icon: Building2 },
-  { href: '/scheduled', label: 'Scheduled', icon: Calendar },
-  { href: '/locations', label: 'Locations', icon: Globe },
-  { href: '/industries', label: 'Industries', icon: Factory },
-  { href: '/discovery', label: 'Discovery', icon: Rocket },
-  { href: '/coverage', label: 'Coverage', icon: Map },
-  { href: '/discovery-health', label: 'Health', icon: HeartPulse },
-  { href: '/intelligence-center', label: 'Intel Center', icon: Brain },
-  { href: '/heatmap', label: 'Heatmap', icon: Globe },
-  { href: '/benchmarks', label: 'Benchmarks', icon: BarChart3 },
-  { href: '/executive-ai', label: 'Executive AI', icon: Sparkles },
-  { href: '/pipeline', label: 'Pipeline', icon: GitBranch },
-  { href: '/prospects', label: 'Top Prospects', icon: Target },
-  { href: '/automation', label: 'Automation', icon: Zap },
-  { href: '/observability', label: 'Observability', icon: Activity },
-  { href: '/briefing', label: 'Morning Briefing', icon: Coffee },
-  { href: '/proposals', label: 'Proposals', icon: FileText },
-  { href: '/copywriter', label: 'Copywriter', icon: Wand2 },
-  { href: '/redesign', label: 'Redesign', icon: Eye },
-  { href: '/monitoring', label: 'Monitoring', icon: Settings },
-  { href: '/reports', label: 'Reports', icon: BarChart3 },
-  { href: '/playbook', label: 'Playbook', icon: Lightbulb },
-  { href: '/competitors', label: 'Competitors', icon: Target },
-  { href: '/export', label: 'Export', icon: FileDown },
-  { href: '/audit', label: 'Audit', icon: Settings },
-  { href: '/notifications', label: 'Notifications', icon: Bell },
-  { href: '/admin', label: 'Admin', icon: Shield },
+  { href: '/campaigns', label: 'Campaigns', icon: Briefcase },
+  { href: '/reports', label: 'Reports', icon: Briefcase },
+  { href: '/settings', label: 'Settings', icon: Settings },
+];
+
+const advancedItems = [
+  { href: '/admin', label: 'Admin' },
+  { href: '/audit', label: 'Website Audit' },
+  { href: '/jobs', label: 'Search Jobs' },
+  { href: '/scheduled', label: 'Scheduled' },
+  { href: '/export', label: 'Export' },
 ];
 
 function AppShell({ children }: { children: React.ReactNode }) {
@@ -62,93 +36,118 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const { user, logout, isAuthenticated } = useAuth();
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen bg-[hsl(224,71%,4%)] overflow-hidden">
+      {/* Mobile menu button */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
         className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg glass"
       >
-        {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        {sidebarOpen ? <X className="h-5 w-5 text-white" /> : <Menu className="h-5 w-5 text-white" />}
       </button>
 
+      {/* Sidebar */}
       <aside
         className={cn(
-          "fixed lg:static inset-y-0 left-0 z-40 w-64 glass-sidebar transform transition-transform duration-200 ease-in-out",
+          "fixed lg:static inset-y-0 left-0 z-40 w-[260px] glass-sidebar flex flex-col transition-transform duration-200 ease-in-out",
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
       >
-        <div className="flex flex-col h-full">
-          <div className="p-6 border-b border-white/5">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <Zap className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <span className="font-bold text-lg gradient-text">Ventriee Leads</span>
-            </Link>
-          </div>
-
-          <div className="px-4 pt-3 pb-1">
-            <CommandBar />
-          </div>
-
-          <nav className="flex-1 p-4 space-y-0.5 overflow-y-auto scrollbar-thin">
-            {navItems.map(item => {
-              const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setSidebarOpen(false)}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all",
-                    isActive
-                      ? "bg-primary/10 text-primary border border-primary/20"
-                      : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-                  )}
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-
-          <div className="p-4 border-t border-white/5">
-            {isAuthenticated && user ? (
-              <div className="space-y-2">
-                <Link href="/settings" className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-all">
-                  {user.avatar_url ? (
-                    <img src={user.avatar_url} alt="" className="w-6 h-6 rounded-full" />
-                  ) : (
-                    <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
-                      <User className="h-3 w-3 text-primary" />
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{user.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">{user.email}</div>
-                  </div>
-                </Link>
-                <button
-                  onClick={() => logout()}
-                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-red-500/10 hover:text-red-500 transition-all w-full"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Sign Out
-                </button>
-              </div>
-            ) : (
-              <Link href="/login" className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-all">
-                <User className="h-4 w-4" />
-                Sign In
-              </Link>
-            )}
-            <div className="text-xs text-muted-foreground mt-2 px-3">
-              Ventriee Leads v3.0
+        {/* Logo */}
+        <div className="h-16 flex items-center px-5 border-b border-white/[0.04]">
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+              <Zap className="h-4 w-4 text-white" />
             </div>
+            <span className="font-semibold text-[15px] text-white tracking-tight">Ventriee</span>
+          </Link>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 py-3 px-3 space-y-0.5 overflow-y-auto scrollbar-thin">
+          {navItems.map(item => {
+            const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setSidebarOpen(false)}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150",
+                  isActive
+                    ? "bg-white/[0.08] text-white"
+                    : "text-[hsl(215,20%,55%)] hover:bg-white/[0.04] hover:text-[hsl(215,31%,75%)]"
+                )}
+              >
+                <item.icon className={cn("h-4 w-4", isActive ? "text-blue-400" : "")} />
+                {item.label}
+              </Link>
+            );
+          })}
+
+          {/* Advanced section */}
+          <div className="pt-4 pb-2 px-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[hsl(215,16%,35%)]">Advanced</p>
+          </div>
+          {advancedItems.map(item => (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setSidebarOpen(false)}
+              className={cn(
+                "flex items-center justify-between px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all",
+                pathname === item.href
+                  ? "bg-white/[0.06] text-white"
+                  : "text-[hsl(215,16%,35%)] hover:bg-white/[0.03] hover:text-[hsl(215,20%,50%)]"
+              )}
+            >
+              {item.label}
+              <ChevronRight className="w-3 h-3 opacity-40" />
+            </Link>
+          ))}
+        </nav>
+
+        {/* User section */}
+        <div className="p-3 border-t border-white/[0.04]">
+          {isAuthenticated && user ? (
+            <div className="space-y-1">
+              <Link
+                href="/settings"
+                onClick={() => setSidebarOpen(false)}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium text-[hsl(215,20%,55%)] hover:bg-white/[0.04] hover:text-white transition-all"
+              >
+                {user.avatar_url ? (
+                  <img src={user.avatar_url} alt="" className="w-6 h-6 rounded-full" />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
+                    <User className="h-3 w-3 text-blue-400" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-medium text-white truncate">{user.name}</div>
+                  <div className="text-[11px] text-[hsl(215,16%,40%)] truncate">{user.email}</div>
+                </div>
+              </Link>
+              <button
+                onClick={() => logout()}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium text-[hsl(215,16%,40%)] hover:bg-red-500/10 hover:text-red-400 transition-all w-full"
+              >
+                <LogOut className="h-4 w-4" />
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <Link href="/login" className="flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium text-[hsl(215,16%,40%)] hover:bg-white/[0.04] hover:text-white transition-all">
+              <User className="h-4 w-4" />
+              Sign In
+            </Link>
+          )}
+          <div className="text-[10px] text-[hsl(215,16%,28%)] mt-2 px-3">
+            v4.0
           </div>
         </div>
       </aside>
 
+      {/* Mobile overlay */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/60 z-30 lg:hidden"
@@ -156,6 +155,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         />
       )}
 
+      {/* Main content */}
       <main className="flex-1 overflow-auto">
         {children}
       </main>
@@ -166,6 +166,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
+      <head>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+      </head>
       <body className="antialiased">
         <AuthProvider>
           <Toaster>

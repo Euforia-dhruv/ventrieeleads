@@ -1,83 +1,52 @@
 'use client';
 
-import { Globe, Search, Mail, Phone, Link2, AtSign, Share2, Cpu, BarChart3, Target, CheckCircle2, Loader2 } from 'lucide-react';
+import { Loader2, CheckCircle2, Globe, Search, Mail, Phone, Link2, Cpu, BarChart3 } from 'lucide-react';
 
 interface SearchProgressProps {
   currentStep: number;
-  steps?: string[];
 }
 
-const DEFAULT_STEPS = [
-  'Parsing your search query...',
-  'Resolving locations worldwide...',
-  'Discovering companies...',
-  'Checking websites...',
-  'Finding emails & phones...',
-  'Discovering social links...',
-  'Detecting technology...',
-  'Running AI audit...',
-  'Generating scores...',
-  'Enriching data...',
+const STEPS = [
+  { label: 'Searching providers...', icon: Globe },
+  { label: 'Finding businesses...', icon: Search },
+  { label: 'Extracting contacts...', icon: Mail },
+  { label: 'Discovering social links...', icon: Link2 },
+  { label: 'Running AI analysis...', icon: Cpu },
+  { label: 'Scoring leads...', icon: BarChart3 },
 ];
 
-const STEP_ICONS = [Globe, Globe, Search, Globe, Mail, Link2, AtSign, Share2, Cpu, BarChart3, Target, CheckCircle2];
+export default function SearchProgress({ currentStep }: SearchProgressProps) {
+  const pct = Math.min(100, Math.round((currentStep / 100) * 100));
+  const activeStep = Math.min(STEPS.length - 1, Math.floor((currentStep / 100) * STEPS.length));
 
-export default function SearchProgress({ currentStep, steps = DEFAULT_STEPS }: SearchProgressProps) {
   return (
-    <div className="w-full max-w-2xl mx-auto">
-      <div className="glass-card rounded-2xl p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
-            <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+    <div className="glass-card rounded-xl p-3 px-4 backdrop-blur-xl">
+      <div className="flex items-center gap-3">
+        <Loader2 className="w-4 h-4 text-blue-400 animate-spin shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] font-medium text-white">{STEPS[activeStep].label}</span>
+            <span className="text-[10px] text-[hsl(215,16%,45%)]">{pct}%</span>
           </div>
-          <div>
-            <h3 className="text-lg font-semibold text-white">Discovering companies</h3>
-            <p className="text-sm text-slate-400">This usually takes 10-30 seconds</p>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          {steps.map((step, i) => {
-            const Icon = STEP_ICONS[i] || Search;
-            const isComplete = i < currentStep;
-            const isCurrent = i === currentStep;
-            const isPending = i > currentStep;
-
-            return (
-              <div
-                key={i}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
-                  isComplete
-                    ? 'bg-green-500/10 text-green-400'
-                    : isCurrent
-                    ? 'bg-blue-500/10 text-blue-400'
-                    : 'text-slate-600'
-                }`}
-              >
-                {isComplete ? (
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                ) : isCurrent ? (
-                  <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-                ) : (
-                  <Icon className="w-4 h-4 shrink-0 opacity-40" />
-                )}
-                <span className={`text-sm ${isPending ? 'opacity-40' : ''}`}>{step}</span>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="mt-4 pt-4 border-t border-slate-700/50">
-          <div className="flex items-center justify-between text-xs text-slate-500">
-            <span>Step {currentStep + 1} of {steps.length}</span>
-            <span>{Math.round(((currentStep + 1) / steps.length) * 100)}%</span>
-          </div>
-          <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+          <div className="mt-1.5 h-1 bg-white/[0.06] rounded-full overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-500"
-              style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
+              style={{ width: `${pct}%` }}
             />
           </div>
+        </div>
+        {/* Step indicators */}
+        <div className="hidden md:flex items-center gap-1 shrink-0">
+          {STEPS.map((step, i) => (
+            <div
+              key={i}
+              className={`w-1.5 h-1.5 rounded-full transition-all ${
+                i < activeStep ? 'bg-green-500' :
+                i === activeStep ? 'bg-blue-500 animate-pulse-glow' :
+                'bg-white/[0.1]'
+              }`}
+            />
+          ))}
         </div>
       </div>
     </div>
