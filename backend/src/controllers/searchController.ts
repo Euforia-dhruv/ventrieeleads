@@ -30,6 +30,7 @@ export async function createSearchJob(req: Request, res: Response): Promise<void
   try {
     const {
       query,
+      location = '',
       country = '',
       city = '',
       area = '',
@@ -37,7 +38,8 @@ export async function createSearchJob(req: Request, res: Response): Promise<void
       keyword = '',
       min_rating = 0,
       min_reviews = 0,
-      max_results = 50
+      max_results = 50,
+      provider
     } = req.body;
 
     if (!query && !industry && !keyword) {
@@ -48,15 +50,21 @@ export async function createSearchJob(req: Request, res: Response): Promise<void
       return;
     }
 
+    const searchQuery = query || `${industry} ${keyword}`.trim();
+    const finalCity = city || (location ? location.trim() : '');
+    const finalCountry = country;
+    const finalArea = area;
+    const metadata: Record<string, unknown> = {};
+    if (provider) metadata.provider = provider;
+
     const jobId = uuidv4();
     const pool = getPool();
 
-    const searchQuery = query || `${industry} ${keyword}`.trim();
     const result = await pool.query(`
-      INSERT INTO search_jobs (id, query, country, city, area, industry, keyword, min_rating, min_reviews, max_results, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'queued')
+      INSERT INTO search_jobs (id, query, country, city, area, industry, keyword, min_rating, min_reviews, max_results, status, metadata)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'queued', $11::jsonb)
       RETURNING *
-    `, [jobId, searchQuery, country, city, area, industry, keyword, min_rating, min_reviews, max_results]);
+    `, [jobId, searchQuery, finalCountry, finalCity, finalArea, industry, keyword, min_rating, min_reviews, max_results, JSON.stringify(metadata)]);
 
     const job = result.rows[0];
 

@@ -109,3 +109,65 @@ def scrape_company(self, company_id: str):
             logger.error(f"Scraping failed for {company.name}: {e}")
             db.rollback()
             raise
+
+
+@app.task(bind=True, name="worker.tasks.scrape.crawl_company")
+def crawl_company(self, company_id: str):
+    """Deep-crawl a company website using Scout provider."""
+    logger.info(f"Deep-crawling company: {company_id}")
+
+    with get_db_context() as db:
+        company = db.query(Company).filter(Company.id == company_id).first()
+        if not company or not company.website:
+            logger.warning(f"Company not found or no website: {company_id}")
+            return
+
+        try:
+            from worker.providers.scout import ScoutProvider
+            import asyncio
+
+            scout = ScoutProvider()
+            asyncio.run(scout.initialize())
+
+            lead_data = asyncio.run(scout.crawl_website(company.website))
+
+            if lead_data:
+                website = db.query(Website).filter(Website.company_id == company_id).first()
+                if not website:
+                    website = Website(company_id=company_id, url=company.website)
+                    db.add(website)
+
+                meta = lead_data.metadata or {}
+                all_emails = meta.get("all_emails", [])
+                all_phones = meta.get("all_phones", [])
+                whatsapp = meta.get("whatsapp", "")
+                services = meta.get("services", [])
+
+                if all_emails and not website.emails:
+                    website.emails = all_emails
+                if all_phones and not website.phone_numbers:
+                    website.phone_numbers = all_phones
+                if whatsapp and not website.whatsapp:
+                    website.whatsapp = whatsapp
+                if services:
+                    website.services = services
+
+                if all_emails and not company.email:
+                    company.email = all_emails[0]
+                if all_phones and not company.phone:
+                    company.phone = all_phones[0]
+
+                existing_socials = website.extra_data or {}
+                existing_socials.update(lead_data.social_links or {})
+                website.extra_data = existing_socials
+
+                db.commit()
+                logger.info(f"Deep-crawled {company.name}: {len(all_emails)} emails, {len(all_phones)} phones")
+            else:
+                logger.info(f"No additional data found for {company.name}")
+
+        except ImportError:
+            logger.warning("Scrapling not installed, skipping deep crawl")
+        except Exception as e:
+            logger.error(f"Deep crawl failed for {company.name}: {e}")
+            db.rollback()

@@ -1,8 +1,10 @@
-"""Abstract base class for all lead providers."""
+"""Abstract base class for all lead providers — extended with full capability interface."""
 import logging
+import hashlib
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, asdict
-from typing import List, Dict, Optional, Any, Set
+from typing import List, Dict, Optional, Any, Set, Tuple
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -37,9 +39,25 @@ class NormalizedLead:
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
+    def dedup_key(self) -> str:
+        """Generate a deduplication key based on website, phone, or name."""
+        parts = []
+        if self.website:
+            parts.append(f"w:{self.website.lower().rstrip('/').replace('https://', '').replace('http://', '').replace('www.', '')}")
+        if self.phone:
+            import re
+            phone_clean = re.sub(r'[^\d]', '', self.phone)
+            if len(phone_clean) >= 8:
+                parts.append(f"p:{phone_clean}")
+        if self.google_maps_url:
+            parts.append(f"g:{self.google_maps_url}")
+        if not parts:
+            parts.append(f"n:{self.name.lower().strip()}")
+        return "|".join(parts)
+
 
 class BaseProvider(ABC):
-    """Base class all providers must extend."""
+    """Base class all providers must extend with full capability interface."""
 
     name: str = "Base Provider"
     slug: str = "base"
@@ -60,14 +78,23 @@ class BaseProvider(ABC):
     pricing_tier: str = "free"  # free, freemium, paid, custom
     pricing_per_request: float = 0.0
 
+    # Capability flags
+    supports_map_search: bool = False
+    supports_coordinates: bool = False
+    supports_bounding_box: bool = False
+    supports_nearby: bool = False
+    supports_categories: bool = False
+
     def __init__(self, config: Dict = None):
         self.config = config or {}
         self._is_initialized = False
         self._is_enabled = True
         self._request_count: int = 0
-        self._last_request_time: Optional[datetime] = None
         self._error_count: int = 0
+        self._last_request_time: Optional[datetime] = None
         self._last_error: Optional[str] = None
+        self._total_latency_ms: float = 0.0
+        self._success_count: int = 0
 
     @property
     def is_ready(self) -> bool:
@@ -100,6 +127,53 @@ class BaseProvider(ABC):
     ) -> List[NormalizedLead]:
         """Search for businesses and return normalized leads."""
         pass
+
+    async def search_by_map(
+        self,
+        query: str,
+        lat: float,
+        lng: float,
+        radius_km: float = 10.0,
+        max_results: int = 50,
+        min_rating: float = 0,
+        min_reviews: int = 0,
+        **kwargs
+    ) -> List[NormalizedLead]:
+        """Search near a map point. Override if provider supports coordinates."""
+        return []
+
+    async def search_by_bounding_box(
+        self,
+        query: str,
+        north: float, south: float, east: float, west: float,
+        max_results: int = 50,
+        min_rating: float = 0,
+        min_reviews: int = 0,
+        **kwargs
+    ) -> List[NormalizedLead]:
+        """Search within a bounding box. Override if provider supports it."""
+        return []
+
+    async def search_nearby(
+        self,
+        query: str,
+        lat: float, lng: float,
+        radius_km: float = 5.0,
+        max_results: int = 50,
+        **kwargs
+    ) -> List[NormalizedLead]:
+        """Search nearby a point. Override if provider supports it."""
+        return []
+
+    async def search_categories(
+        self,
+        category: str,
+        location: str = "",
+        max_results: int = 50,
+        **kwargs
+    ) -> List[NormalizedLead]:
+        """Search by category. Override if provider supports it."""
+        return []
 
     async def details(self, company_url: str) -> Optional[Dict]:
         """Get detailed info about a specific company. Optional."""
@@ -134,7 +208,9 @@ class BaseProvider(ABC):
             "requests_per_day": self.requests_per_day,
             "total_requests": self._request_count,
             "error_count": self._error_count,
+            "success_count": self._success_count,
             "last_error": self._last_error,
+            "avg_latency_ms": round(self._total_latency_ms / max(self._success_count, 1), 1),
         }
 
     def get_pricing_info(self) -> Dict[str, Any]:
@@ -156,11 +232,42 @@ class BaseProvider(ABC):
             "supported_countries": self.supported_countries,
             "supported_cities": self.supported_cities,
             "supported_industries": self.supported_industries,
+            "supports_map_search": self.supports_map_search,
+            "supports_coordinates": self.supports_coordinates,
+            "supports_bounding_box": self.supports_bounding_box,
+            "supports_nearby": self.supports_nearby,
+            "supports_categories": self.supports_categories,
             "pricing": self.get_pricing_info(),
             "rate_limits": self.get_rate_limit_info(),
             "is_ready": self.is_ready,
             "is_enabled": self.is_enabled,
         }
+
+    def supports_location(self, country: str = "", city: str = "") -> bool:
+        """Check if provider supports a specific location."""
+        if "*" in self.supported_countries:
+            return True
+        if country and country.upper() in [c.upper() for c in self.supported_countries]:
+            return True
+        if city and city.lower() in [c.lower() for c in self.supported_cities]:
+            return True
+        return not country and not city
+
+    def supports_website(self) -> bool:
+        """Provider can return website URLs."""
+        return True
+
+    def supports_email(self) -> bool:
+        """Provider can return email addresses."""
+        return True
+
+    def supports_phone(self) -> bool:
+        """Provider can return phone numbers."""
+        return True
+
+    def supports_socials(self) -> bool:
+        """Provider can return social media links."""
+        return True
 
     def enable(self) -> None:
         """Enable this provider."""
@@ -176,6 +283,11 @@ class BaseProvider(ABC):
         """Track a request for rate limiting."""
         self._request_count += 1
         self._last_request_time = datetime.utcnow()
+
+    def _track_success(self, latency_ms: float) -> None:
+        """Track a successful request."""
+        self._success_count += 1
+        self._total_latency_ms += latency_ms
 
     def _track_error(self, error: str) -> None:
         """Track an error."""

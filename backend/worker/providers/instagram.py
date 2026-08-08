@@ -65,7 +65,7 @@ class InstagramProvider(BaseProvider):
                         links.forEach(link => {
                             const href = link.getAttribute('href');
                             if (href && href.match(/^\\/[^/]+\\/$/) && !href.includes('explore') && !href.includes('accounts')) {
-                                profiles.add(href.replace(/\//g, ''));
+                                profiles.add(href.replace(/\\//g, ''));
                             }
                         });
                         return Array.from(profiles).slice(0, 50);

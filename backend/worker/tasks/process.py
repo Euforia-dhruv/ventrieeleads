@@ -1,4 +1,5 @@
-"""Process task - orchestrates the full pipeline per company."""
+"""Process task - orchestrates the full pipeline per company: scrape, crawl, audit, score, enrich."""
+import asyncio
 import logging
 from datetime import datetime, timedelta
 from worker.celery_app import app
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 @app.task(bind=True, name="worker.tasks.process.process_company")
 def process_company(self, company_id: str):
-    """Process a single company: scrape, then audit, then score."""
+    """Process a single company: scrape, crawl, audit, score, enrich with AI."""
     logger.info(f"Processing company: {company_id}")
 
     with get_db_context() as db:
@@ -20,23 +21,36 @@ def process_company(self, company_id: str):
             return
 
         if company.website:
-            self.update_state(state="PROGRESS", meta={"stage": "scraping", "progress": 20})
+            self.update_state(state="PROGRESS", meta={"stage": "scraping", "progress": 10})
             try:
                 from worker.tasks.scrape import scrape_company
                 scrape_company.delay(str(company_id))
             except Exception as e:
                 logger.error(f"Scraping dispatch failed for {company.name}: {e}")
 
-            self.update_state(state="PROGRESS", meta={"stage": "auditing", "progress": 60})
+            self.update_state(state="PROGRESS", meta={"stage": "crawling", "progress": 25})
+            try:
+                from worker.tasks.scrape import crawl_company
+                crawl_company.delay(str(company_id))
+            except Exception as e:
+                logger.error(f"Crawling dispatch failed for {company.name}: {e}")
+
+            self.update_state(state="PROGRESS", meta={"stage": "auditing", "progress": 40})
             try:
                 from worker.tasks.audit import audit_website
                 audit_website.delay(str(company_id))
             except Exception as e:
                 logger.error(f"Audit dispatch failed for {company.name}: {e}")
         else:
-            logger.info(f"No website for {company.name}, skipping scrape/audit")
+            logger.info(f"No website for {company.name}, skipping scrape/audit/crawl")
 
-        self.update_state(state="PROGRESS", meta={"stage": "scoring", "progress": 90})
+        self.update_state(state="PROGRESS", meta={"stage": "enriching", "progress": 60})
+        try:
+            _enrich_with_providers(str(company_id))
+        except Exception as e:
+            logger.error(f"Provider enrichment failed for {company.name}: {e}")
+
+        self.update_state(state="PROGRESS", meta={"stage": "scoring", "progress": 80})
         try:
             from worker.services.scoring import lead_scorer
             from worker.models import Website, Technology, Audit
@@ -94,6 +108,61 @@ def process_company(self, company_id: str):
             logger.error(f"Scoring failed for {company.name}: {e}")
 
         self.update_state(state="PROGRESS", meta={"stage": "completed", "progress": 100})
+
+
+def _enrich_with_providers(company_id: str) -> None:
+    """Enrich a company using available providers."""
+    try:
+        from worker.providers.registry import registry
+        from worker.models import Company
+
+        with get_db_context() as db:
+            company = db.query(Company).filter(Company.id == company_id).first()
+            if not company:
+                return
+
+            from worker.providers.base import NormalizedLead
+            lead = NormalizedLead(
+                name=company.name,
+                source=company.source or "unknown",
+                website=company.website or "",
+                phone=company.phone or "",
+                email=company.email or "",
+                address=company.address or "",
+                city=company.city or "",
+                country=company.country or "",
+                industry=company.industry or "",
+                rating=company.rating or 0,
+                review_count=company.review_count or 0,
+                logo_url=company.logo_url or "",
+                latitude=company.latitude or 0,
+                longitude=company.longitude or 0,
+                google_maps_url=company.google_maps_url or "",
+            )
+
+            enriched = asyncio.run(registry.enrich_lead(lead))
+
+            if enriched.email and not company.email:
+                company.email = enriched.email
+            if enriched.phone and not company.phone:
+                company.phone = enriched.phone
+            if enriched.logo_url and not company.logo_url:
+                company.logo_url = enriched.logo_url
+            if enriched.description:
+                extra = company.extra_data or {}
+                extra["enriched_description"] = enriched.description
+                company.extra_data = extra
+
+            existing_socials = company.extra_data or {}
+            if enriched.social_links:
+                existing_socials.update(enriched.social_links)
+                company.extra_data = existing_socials
+
+            db.commit()
+            logger.info(f"Enriched {company.name}: email={enriched.email}, phone={enriched.phone}")
+
+    except Exception as e:
+        logger.error(f"Provider enrichment failed for {company_id}: {e}")
 
 
 @app.task(name="worker.tasks.process.cleanup_stale_jobs")
