@@ -1,6 +1,8 @@
 """AI-powered website audit service."""
 import logging
 import re
+import socket
+import ssl as ssl_module
 from typing import Dict, List
 import httpx
 
@@ -38,6 +40,7 @@ class AuditService:
 
                 result["checks"]["ssl"] = url.startswith("https")
                 result["checks"]["load_time_seconds"] = round(load_time, 2)
+                result["checks"]["html_size_bytes"] = len(html)
                 result["checks"]["has_title"] = bool(re.search(r'<title>[^<]+</title>', html, re.I))
                 result["checks"]["has_meta_description"] = bool(re.search(r'<meta\s+name=["\']description["\']', html, re.I))
                 result["checks"]["has_viewport"] = bool(re.search(r'<meta\s+name=["\']viewport["\']', html, re.I))
@@ -80,11 +83,55 @@ class AuditService:
                     result["conversion_score"] * 0.15 + result["trust_score"] * 0.15
                 )
                 result["raw_data"] = {"url": url, "status_code": response.status_code, "html_size": len(html), "load_time": load_time}
+
+                result["checks"]["dns_ssl"] = self._dns_ssl_profile(url, response)
         except Exception as e:
             logger.error(f"Audit failed for {url}: {e}")
             result["issues"].append({"category": "technical", "severity": "critical", "title": "Website Unreachable", "description": f"Could not access {url}: {str(e)}"})
         logger.info(f"Audit complete for {url}: overall={result['overall_score']}")
         return result
+
+    def _dns_ssl_profile(self, url: str, response: httpx.Response = None) -> Dict:
+        """Collect lightweight DNS + TLS profile using only the standard library.
+
+        Gives quick technical enrichment: resolves the host, checks A record,
+        verifies the TLS cert chain validity/expiry, and captures the HTTP version.
+        Pure-additive: any failure yields empty fields rather than failing the audit.
+        """
+        host = url.split("://")[-1].split("/")[0].split(":")[0]
+        profile: Dict = {}
+        try:
+            addrs = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
+            profile["resolved_ips"] = sorted({a[4][0] for a in addrs if a[0] in (socket.AF_INET, socket.AF_INET6)})[:5]
+        except Exception as e:
+            profile["dns_error"] = str(e)[:200]
+
+        try:
+            ctx = ssl_module.create_default_context()
+            with socket.create_connection((host, 443), timeout=10) as sock:
+                with ctx.wrap_socket(sock, server_hostname=host) as tls:
+                    profile["tls_version"] = tls.version()
+                    cert = tls.getpeercert()
+                    profile["ssl_valid"] = True
+                    profile["ssl_issuer"] = dict(x[0] for x in cert.get("issuer", [])).get("organizationName", "")
+                    profile["ssl_subject"] = dict(x[0] for x in cert.get("subject", [])).get("commonName", "")
+                    if cert.get("notAfter"):
+                        from datetime import datetime
+                        try:
+                            expires = datetime.strptime(cert["notAfter"], "%b %d %H:%M:%S %Y %Z")
+                            days_left = (expires - datetime.utcnow()).days
+                            profile["ssl_days_left"] = days_left
+                            profile["ssl_expires_soon"] = 0 < days_left <= 30
+                        except Exception:
+                            pass
+        except Exception as e:
+            profile["ssl_error"] = str(e)[:200]
+
+        if response is not None:
+            profile["http_version"] = getattr(response, "http_version", None)
+            profile["server"] = response.headers.get("server", "")
+
+        return profile
 
     def _calc_seo(self, c: Dict) -> int:
         s = 0

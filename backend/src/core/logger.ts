@@ -4,7 +4,7 @@ import path from 'path';
 const logFormat = winston.format.combine(
   winston.format.timestamp(),
   winston.format.errors({ stack: true }),
-  winston.format.json()
+  winston.format.json(),
 );
 
 const logger = winston.createLogger({
@@ -15,15 +15,12 @@ const logger = winston.createLogger({
     new winston.transports.File({
       filename: path.join(process.env.LOG_FILE || '/tmp/backend.log'),
       maxsize: 10485760, // 10MB
-      maxFiles: 5
+      maxFiles: 5,
     }),
     new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      )
-    })
-  ]
+      format: winston.format.combine(winston.format.colorize(), winston.format.simple()),
+    }),
+  ],
 });
 
 export { logger };

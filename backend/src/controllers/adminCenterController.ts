@@ -1,9 +1,10 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { getPool } from '../database/connection';
 import { logger } from '../core/logger';
 import { redisClient } from '../database/redis';
 import { backupService } from '../services/backupService';
 import { AuthRequest } from '../middleware/auth';
+import { minioClient } from '../database/minio';
 
 // ─── GET /admin/users ──────────────────────────────────────────────────────
 
@@ -71,7 +72,7 @@ export async function listAdminUsers(req: AuthRequest, res: Response): Promise<v
     res.json({
       success: true,
       data: result.rows,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
     });
   } catch (error) {
     logger.error('Error listing admin users:', error);
@@ -87,7 +88,6 @@ export async function updateUserRole(req: AuthRequest, res: Response): Promise<v
     const { id } = req.params;
     const { role, is_active, name } = req.body;
 
-    const allowedFields = ['role', 'is_active', 'name'];
     const sets: string[] = [];
     const values: any[] = [];
     let paramIndex = 1;
@@ -123,7 +123,7 @@ export async function updateUserRole(req: AuthRequest, res: Response): Promise<v
     const result = await pool.query(
       `UPDATE users SET ${sets.join(', ')} WHERE id = $${paramIndex} AND is_deleted = false
        RETURNING id, email, name, role, is_active, workspace_id, created_at, updated_at`,
-      values
+      values,
     );
 
     if (result.rows.length === 0) {
@@ -134,7 +134,7 @@ export async function updateUserRole(req: AuthRequest, res: Response): Promise<v
     logger.info('Admin updated user', {
       adminId: req.user?.id,
       targetUserId: id,
-      changes: Object.keys(req.body).filter(k => req.body[k] !== undefined)
+      changes: Object.keys(req.body).filter((k) => req.body[k] !== undefined),
     });
 
     res.json({ success: true, data: result.rows[0] });
@@ -156,10 +156,7 @@ export async function softDeleteUser(req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    const userResult = await pool.query(
-      'SELECT * FROM users WHERE id = $1 AND is_deleted = false',
-      [id]
-    );
+    const userResult = await pool.query('SELECT * FROM users WHERE id = $1 AND is_deleted = false', [id]);
 
     if (userResult.rows.length === 0) {
       res.status(404).json({ success: false, message: 'User not found' });
@@ -168,23 +165,21 @@ export async function softDeleteUser(req: AuthRequest, res: Response): Promise<v
 
     const user = userResult.rows[0];
 
-    await pool.query(
-      `SELECT record_soft_delete('users', $1, $2, $3, $4, $5, $6)`,
-      [
-        id, user.email, JSON.stringify(user),
-        req.user?.id, req.user?.email, 'Admin soft delete'
-      ]
-    );
+    await pool.query(`SELECT record_soft_delete('users', $1, $2, $3, $4, $5, $6)`, [
+      id,
+      user.email,
+      JSON.stringify(user),
+      req.user?.id,
+      req.user?.email,
+      'Admin soft delete',
+    ]);
 
-    await pool.query(
-      `UPDATE users SET is_deleted = true, is_active = false, updated_at = NOW() WHERE id = $1`,
-      [id]
-    );
+    await pool.query(`UPDATE users SET is_deleted = true, is_active = false, updated_at = NOW() WHERE id = $1`, [id]);
 
     logger.warn('Admin soft-deleted user', {
       adminId: req.user?.id,
       targetUserId: id,
-      targetEmail: user.email
+      targetEmail: user.email,
     });
 
     res.json({ success: true, deleted: true });
@@ -206,7 +201,8 @@ export async function listWorkspaces(req: AuthRequest, res: Response): Promise<v
     const countResult = await pool.query('SELECT COUNT(*) FROM workspaces WHERE is_deleted = false');
     const total = parseInt(countResult.rows[0].count);
 
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT w.*,
         (SELECT COUNT(*) FROM users u WHERE u.workspace_id = w.id AND u.is_deleted = false) as user_count,
         (SELECT COUNT(*) FROM leads l WHERE l.workspace_id = w.id AND l.is_deleted = false) as lead_count,
@@ -215,12 +211,14 @@ export async function listWorkspaces(req: AuthRequest, res: Response): Promise<v
       WHERE w.is_deleted = false
       ORDER BY w.created_at DESC
       LIMIT $1 OFFSET $2
-    `, [limit, offset]);
+    `,
+      [limit, offset],
+    );
 
     res.json({
       success: true,
       data: result.rows,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
     });
   } catch (error) {
     logger.error('Error listing workspaces:', error);
@@ -263,7 +261,7 @@ export async function updateWorkspace(req: AuthRequest, res: Response): Promise<
 
     const result = await pool.query(
       `UPDATE workspaces SET ${sets.join(', ')} WHERE id = $${paramIndex} AND is_deleted = false RETURNING *`,
-      values
+      values,
     );
 
     if (result.rows.length === 0) {
@@ -311,7 +309,7 @@ export async function getProviderConfigs(_req: AuthRequest, res: Response): Prom
           avg_latency_ms: 0,
           countries: 0,
           last_error: null,
-          countries_detail: []
+          countries_detail: [],
         };
       }
       const p = aggregated[row.provider_slug];
@@ -324,31 +322,56 @@ export async function getProviderConfigs(_req: AuthRequest, res: Response): Prom
       p.countries_detail.push({
         country_code: row.country_code,
         requests: row.total_requests,
-        success_rate: row.total_requests > 0
-          ? Math.round(row.successful_requests / row.total_requests * 1000) / 1000
-          : 0,
-        avg_latency: row.avg_latency_ms
+        success_rate:
+          row.total_requests > 0 ? Math.round((row.successful_requests / row.total_requests) * 1000) / 1000 : 0,
+        avg_latency: row.avg_latency_ms,
       });
     }
 
     for (const p of Object.values(aggregated) as any[]) {
-      p.avg_latency_ms = p.total_requests > 0
-        ? Math.round(p.avg_latency_ms / p.total_requests)
-        : 0;
-      p.success_rate = p.total_requests > 0
-        ? Math.round(p.successful / p.total_requests * 1000) / 1000
-        : 0;
+      p.avg_latency_ms = p.total_requests > 0 ? Math.round(p.avg_latency_ms / p.total_requests) : 0;
+      p.success_rate = p.total_requests > 0 ? Math.round((p.successful / p.total_requests) * 1000) / 1000 : 0;
     }
 
-    const envProviders = {
+    const envProviders: Record<string, any> = {
       openai: { configured: !!process.env.OPENAI_API_KEY },
       gemini: { configured: !!process.env.GEMINI_API_KEY },
-      ollama: { configured: !!process.env.OLLAMA_URL }
+      anthropic: { configured: !!process.env.ANTHROPIC_API_KEY },
+      ollama: { configured: !!process.env.OLLAMA_URL },
+      outscraper: { configured: !!process.env.OUTSCRAPER_API_KEY },
+      apollo: { configured: !!process.env.APOLLO_API_KEY },
+      hunter: { configured: !!process.env.HUNTER_API_KEY },
+      apify: { configured: !!process.env.APIFY_API_TOKEN },
+      builtwith: { configured: !!process.env.BUILTWITH_API_KEY },
+      wappalyzer: { configured: !!process.env.WAPPALYZER_API_KEY },
     };
+
+    // Merge persisted worker configs so the admin UI reflects DB-stored keys.
+    let storedConfigs: Record<string, any> = {};
+    try {
+      const configRow = await pool.query(
+        "SELECT value FROM admin_settings WHERE key = 'provider_configs'",
+      );
+      if (configRow.rows.length > 0 && configRow.rows[0].value) {
+        storedConfigs = JSON.parse(configRow.rows[0].value) || {};
+      }
+    } catch {
+      storedConfigs = {};
+    }
+
+    for (const [slug, cfg] of Object.entries(storedConfigs)) {
+      envProviders[slug] = {
+        ...envProviders[slug],
+        configured: !!cfg.api_key || !!envProviders[slug]?.configured,
+        api_key_set: !!cfg.api_key,
+        base_url: cfg.base_url || null,
+        enabled: cfg.enabled,
+      };
+    }
 
     res.json({
       success: true,
-      data: { providers: Object.values(aggregated), env_config: envProviders }
+      data: { providers: Object.values(aggregated), env_config: envProviders },
     });
   } catch (error) {
     logger.error('Error getting provider configs:', error);
@@ -358,22 +381,27 @@ export async function getProviderConfigs(_req: AuthRequest, res: Response): Prom
 
 // ─── PUT /admin/providers/:slug ──────────────────────────────────────────
 
+const PROVIDER_ENV_KEYS: Record<string, string> = {
+  openai: 'OPENAI_API_KEY',
+  gemini: 'GEMINI_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+  ollama: 'OLLAMA_URL',
+  outscraper: 'OUTSCRAPER_API_KEY',
+  apollo: 'APOLLO_API_KEY',
+  hunter: 'HUNTER_API_KEY',
+  apify: 'APIFY_API_TOKEN',
+  builtwith: 'BUILTWITH_API_KEY',
+  wappalyzer: 'WAPPALYZER_API_KEY',
+  calendly: 'CALENDLY_API_KEY',
+  loom: 'LOOM_API_KEY',
+};
+
 export async function updateProviderConfig(req: AuthRequest, res: Response): Promise<void> {
   try {
     const slug = String(req.params.slug);
     const { api_key, base_url, enabled } = req.body;
 
-    const envKeyMap: Record<string, string> = {
-      openai: 'OPENAI_API_KEY',
-      gemini: 'GEMINI_API_KEY',
-      ollama: 'OLLAMA_URL'
-    };
-
-    const envVar = envKeyMap[slug];
-    if (!envVar) {
-      res.status(400).json({ success: false, message: `Unknown provider: ${slug}` });
-      return;
-    }
+    const envVar = PROVIDER_ENV_KEYS[slug];
 
     const updates: Record<string, any> = {};
     if (api_key && envVar) {
@@ -386,14 +414,72 @@ export async function updateProviderConfig(req: AuthRequest, res: Response): Pro
       updates[baseUrlEnvVar] = base_url;
     }
 
+    // Persist to admin_settings so the Python worker (registry) picks it up.
+    const pool = getPool();
+    const configRow = await pool.query(
+      'SELECT value FROM admin_settings WHERE key = $1',
+      ['provider_configs'],
+    );
+    let configs: Record<string, any> = {};
+    if (configRow.rows.length > 0 && configRow.rows[0].value) {
+      try {
+        configs = JSON.parse(configRow.rows[0].value) || {};
+      } catch {
+        configs = {};
+      }
+    }
+
+    const existing = configs[slug] || {};
+    if (api_key) existing.api_key = api_key;
+    if (base_url) existing.base_url = base_url;
+    if (typeof enabled === 'boolean') existing.enabled = enabled;
+    configs[slug] = existing;
+
+    await pool.query(
+      `INSERT INTO admin_settings (key, value, description, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+      ['provider_configs', JSON.stringify(configs), 'Per-provider API keys and options for the worker registry'],
+    );
+
+    // Keep enabled_providers in sync when a provider is toggled.
+    if (typeof enabled === 'boolean') {
+      const enabledRow = await pool.query(
+        "SELECT value FROM admin_settings WHERE key = 'enabled_providers'",
+      );
+      let enabledList: string[] = [];
+      if (enabledRow.rows.length > 0 && enabledRow.rows[0].value) {
+        try {
+          enabledList = JSON.parse(enabledRow.rows[0].value) || [];
+        } catch {
+          enabledList = [];
+        }
+      }
+      if (!Array.isArray(enabledList)) enabledList = [];
+      const current = new Set<string>(enabledList);
+      if (enabled) {
+        current.add(slug);
+      } else {
+        current.delete(slug);
+      }
+      await pool.query(
+        `INSERT INTO admin_settings (key, value, description, updated_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+        ['enabled_providers', JSON.stringify([...current]), 'List of enabled provider slugs'],
+      );
+    }
+
     logger.warn('Provider config updated via admin', {
-      adminId: req.user?.id, provider: slug, keys: Object.keys(updates)
+      adminId: req.user?.id,
+      provider: slug,
+      keys: Object.keys(updates),
     });
 
     res.json({
       success: true,
       data: { slug, updated: true, changes: Object.keys(updates) },
-      message: 'Provider configuration updated. Changes apply to new requests.'
+      message: 'Provider configuration updated. Changes apply to new requests.',
     });
   } catch (error) {
     logger.error('Error updating provider config:', error);
@@ -412,7 +498,7 @@ export async function getQueueStatus(_req: AuthRequest, res: Response): Promise<
       pool.query("SELECT COUNT(*) FROM search_jobs WHERE status = 'running'"),
       pool.query("SELECT COUNT(*) FROM search_jobs WHERE status = 'queued'"),
       pool.query("SELECT COUNT(*) FROM search_jobs WHERE status = 'completed' AND completed_at >= CURRENT_DATE"),
-      pool.query("SELECT COUNT(*) FROM search_jobs WHERE status = 'failed' AND updated_at >= CURRENT_DATE")
+      pool.query("SELECT COUNT(*) FROM search_jobs WHERE status = 'failed' AND updated_at >= CURRENT_DATE"),
     ]);
 
     let redisQueues: Record<string, any> = {};
@@ -449,11 +535,11 @@ export async function getQueueStatus(_req: AuthRequest, res: Response): Promise<
           running: parseInt(runningJobs.rows[0].count),
           queued: parseInt(queuedJobs.rows[0].count),
           completed_today: parseInt(completedToday.rows[0].count),
-          failed_today: parseInt(failedToday.rows[0].count)
+          failed_today: parseInt(failedToday.rows[0].count),
         },
         campaign_jobs: campaignJobs,
-        redis_queues: redisQueues
-      }
+        redis_queues: redisQueues,
+      },
     });
   } catch (error) {
     logger.error('Error getting queue status:', error);
@@ -497,7 +583,7 @@ export async function getWorkerDetails(_req: AuthRequest, res: Response): Promis
           status: info.status || 'unknown',
           tasks_completed: parseInt(info.tasks_completed || '0'),
           tasks_failed: parseInt(info.tasks_failed || '0'),
-          last_heartbeat: info.last_heartbeat || null
+          last_heartbeat: info.last_heartbeat || null,
         };
       }
     } catch {
@@ -518,12 +604,12 @@ export async function getWorkerDetails(_req: AuthRequest, res: Response): Promis
             rss: Math.round(mem.rss / 1024 / 1024),
             heap_used: Math.round(mem.heapUsed / 1024 / 1024),
             heap_total: Math.round(mem.heapTotal / 1024 / 1024),
-            external: Math.round(mem.external / 1024 / 1024)
+            external: Math.round(mem.external / 1024 / 1024),
           },
           pid: process.pid,
-          node_version: process.version
-        }
-      }
+          node_version: process.version,
+        },
+      },
     });
   } catch (error) {
     logger.error('Error getting worker details:', error);
@@ -537,7 +623,7 @@ export async function getStorageStats(_req: AuthRequest, res: Response): Promise
   try {
     const pool = getPool();
 
-    const dbSize = await pool.query("SELECT pg_size_pretty(pg_database_size(current_database())) as size");
+    const dbSize = await pool.query('SELECT pg_size_pretty(pg_database_size(current_database())) as size');
     const tableSizes = await pool.query(`
       SELECT
         schemaname || '.' || tablename as table_name,
@@ -555,7 +641,6 @@ export async function getStorageStats(_req: AuthRequest, res: Response): Promise
       const buckets = ['leads', 'screenshots', 'logos', 'files', 'backups'];
       for (const bucket of buckets) {
         try {
-          const { minioClient } = require('../database/minio');
           const mc = minioClient.getClient();
           const objects: string[] = [];
           const stream = mc.listObjects(bucket, '', true);
@@ -578,11 +663,11 @@ export async function getStorageStats(_req: AuthRequest, res: Response): Promise
       data: {
         database: {
           total_size: dbSize.rows[0].size,
-          tables: tableSizes.rows
+          tables: tableSizes.rows,
         },
         minio: minioStats,
-        backup_storage: await backupService.getBackupStats()
-      }
+        backup_storage: await backupService.getBackupStats(),
+      },
     });
   } catch (error) {
     logger.error('Error getting storage stats:', error);
@@ -688,13 +773,13 @@ export async function getAuditLogs(req: AuthRequest, res: Response): Promise<voi
     const logs = result.rows.map((row: any) => ({
       ...row,
       changes: row.changes ? JSON.parse(row.changes) : null,
-      metadata: row.metadata ? JSON.parse(row.metadata) : null
+      metadata: row.metadata ? JSON.parse(row.metadata) : null,
     }));
 
     res.json({
       success: true,
       data: logs,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
     });
   } catch (error) {
     logger.error('Error getting audit logs:', error);
@@ -722,8 +807,8 @@ export async function getBackupHistory(req: AuthRequest, res: Response): Promise
         page: result.page,
         limit: result.limit,
         total: result.total,
-        pages: result.pages
-      }
+        pages: result.pages,
+      },
     });
   } catch (error) {
     logger.error('Error getting backup history:', error);
@@ -742,9 +827,7 @@ export async function createBackup(req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    const backup = await backupService.createBackup(
-      name, backup_type, req.user?.id, req.user?.email, description
-    );
+    const backup = await backupService.createBackup(name, backup_type, req.user?.id, req.user?.email, description);
 
     res.status(201).json({ success: true, data: backup });
   } catch (error: any) {
@@ -761,8 +844,14 @@ export async function getSystemMetrics(_req: AuthRequest, res: Response): Promis
     const client = redisClient.getClient();
 
     const [
-      totalUsers, activeUsers, totalLeads, totalCompanies,
-      totalCampaigns, totalSearchJobs, totalAudits, totalProposals
+      totalUsers,
+      activeUsers,
+      totalLeads,
+      totalCompanies,
+      totalCampaigns,
+      totalSearchJobs,
+      totalAudits,
+      totalProposals,
     ] = await Promise.all([
       pool.query('SELECT COUNT(*) FROM users WHERE is_deleted = false'),
       pool.query('SELECT COUNT(*) FROM users WHERE is_deleted = false AND is_active = true'),
@@ -771,7 +860,7 @@ export async function getSystemMetrics(_req: AuthRequest, res: Response): Promis
       pool.query('SELECT COUNT(*) FROM campaigns WHERE is_deleted = false'),
       pool.query('SELECT COUNT(*) FROM search_jobs WHERE is_deleted = false'),
       pool.query('SELECT COUNT(*) FROM audits WHERE is_deleted = false'),
-      pool.query('SELECT COUNT(*) FROM proposals WHERE is_deleted = false')
+      pool.query('SELECT COUNT(*) FROM proposals WHERE is_deleted = false'),
     ]);
 
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
@@ -781,7 +870,7 @@ export async function getSystemMetrics(_req: AuthRequest, res: Response): Promis
       pool.query('SELECT COUNT(*) FROM leads WHERE is_deleted = false AND created_at > $1', [weekAgo]),
       pool.query('SELECT COUNT(*) FROM leads WHERE is_deleted = false AND created_at > $1', [dayAgo]),
       pool.query('SELECT COUNT(*) FROM companies WHERE is_deleted = false AND created_at > $1', [weekAgo]),
-      pool.query("SELECT COUNT(*) FROM search_jobs WHERE status = 'completed' AND completed_at > $1", [weekAgo])
+      pool.query("SELECT COUNT(*) FROM search_jobs WHERE status = 'completed' AND completed_at > $1", [weekAgo]),
     ]);
 
     let redisInfo: Record<string, any> = {};
@@ -790,7 +879,7 @@ export async function getSystemMetrics(_req: AuthRequest, res: Response): Promis
       const usedMem = info.match(/used_memory_human:(.*)/);
       redisInfo = {
         connected: true,
-        memory_used: usedMem ? usedMem[1].trim() : 'unknown'
+        memory_used: usedMem ? usedMem[1].trim() : 'unknown',
       };
     } catch {
       redisInfo = { connected: false };
@@ -800,7 +889,7 @@ export async function getSystemMetrics(_req: AuthRequest, res: Response): Promis
     const poolStats = {
       total: (dbPool as any).totalCount || 0,
       idle: (dbPool as any).idleCount || 0,
-      waiting: (dbPool as any).waitingCount || 0
+      waiting: (dbPool as any).waitingCount || 0,
     };
 
     const mem = process.memoryUsage();
@@ -816,13 +905,13 @@ export async function getSystemMetrics(_req: AuthRequest, res: Response): Promis
           campaigns: parseInt(totalCampaigns.rows[0].count),
           search_jobs: parseInt(totalSearchJobs.rows[0].count),
           audits: parseInt(totalAudits.rows[0].count),
-          proposals: parseInt(totalProposals.rows[0].count)
+          proposals: parseInt(totalProposals.rows[0].count),
         },
         activity: {
           new_leads_week: parseInt(newLeadsWeek.rows[0].count),
           new_leads_day: parseInt(newLeadsDay.rows[0].count),
           new_companies_week: parseInt(newCompaniesWeek.rows[0].count),
-          completed_jobs_week: parseInt(completedJobsWeek.rows[0].count)
+          completed_jobs_week: parseInt(completedJobsWeek.rows[0].count),
         },
         infrastructure: {
           redis: redisInfo,
@@ -831,10 +920,10 @@ export async function getSystemMetrics(_req: AuthRequest, res: Response): Promis
             uptime_seconds: Math.round(process.uptime()),
             memory_mb: Math.round(mem.rss / 1024 / 1024),
             heap_mb: Math.round(mem.heapUsed / 1024 / 1024),
-            pid: process.pid
-          }
-        }
-      }
+            pid: process.pid,
+          },
+        },
+      },
     });
   } catch (error) {
     logger.error('Error getting system metrics:', error);
@@ -864,7 +953,7 @@ export async function getDatabaseStats(_req: AuthRequest, res: Response): Promis
       ORDER BY pg_total_relation_size(c.oid) DESC
     `);
 
-    const dbSize = await pool.query("SELECT pg_size_pretty(pg_database_size(current_database())) as size");
+    const dbSize = await pool.query('SELECT pg_size_pretty(pg_database_size(current_database())) as size');
 
     const connectionStats = await pool.query(`
       SELECT
@@ -887,7 +976,9 @@ export async function getDatabaseStats(_req: AuthRequest, res: Response): Promis
       LIMIT 15
     `);
 
-    const slowQueries = await pool.query(`
+    const slowQueries = await pool
+      .query(
+        `
       SELECT
         calls,
         round(total_exec_time::numeric, 2) as total_ms,
@@ -898,7 +989,9 @@ export async function getDatabaseStats(_req: AuthRequest, res: Response): Promis
       FROM pg_stat_statements
       ORDER BY mean_exec_time DESC
       LIMIT 10
-    `).catch(() => ({ rows: [] }));
+    `,
+      )
+      .catch(() => ({ rows: [] }));
 
     const deadTuples = await pool.query(`
       SELECT
@@ -919,7 +1012,7 @@ export async function getDatabaseStats(_req: AuthRequest, res: Response): Promis
     const poolStats = {
       total: (poolInfo as any).totalCount || 0,
       idle: (poolInfo as any).idleCount || 0,
-      waiting: (poolInfo as any).waitingCount || 0
+      waiting: (poolInfo as any).waitingCount || 0,
     };
 
     res.json({
@@ -931,8 +1024,8 @@ export async function getDatabaseStats(_req: AuthRequest, res: Response): Promis
         top_indexes: indexStats.rows,
         slow_queries: slowQueries.rows,
         dead_tuple_tables: deadTuples.rows,
-        connection_pool: poolStats
-      }
+        connection_pool: poolStats,
+      },
     });
   } catch (error) {
     logger.error('Error getting database stats:', error);
@@ -952,30 +1045,32 @@ export async function toggleMaintenance(req: AuthRequest, res: Response): Promis
       return;
     }
 
-    const currentValue = await pool.query(
-      `SELECT value FROM system_config WHERE key = 'maintenance_mode'`
-    );
+    const currentValue = await pool.query(`SELECT value FROM system_config WHERE key = 'maintenance_mode'`);
 
-    const previousState = currentValue.rows.length > 0
-      ? (typeof currentValue.rows[0].value === 'string'
+    const previousState =
+      currentValue.rows.length > 0
+        ? typeof currentValue.rows[0].value === 'string'
           ? JSON.parse(currentValue.rows[0].value)
-          : currentValue.rows[0].value)
-      : { enabled: false };
+          : currentValue.rows[0].value
+        : { enabled: false };
 
-    await pool.query(`
+    await pool.query(
+      `
       INSERT INTO system_config (key, value, description, updated_by, updated_at)
       VALUES ('maintenance_mode', $1, 'Toggle maintenance mode', $2, NOW())
       ON CONFLICT (key) DO UPDATE
       SET value = $1, updated_by = $2, updated_at = NOW()
-    `, [
-      JSON.stringify({
-        enabled,
-        message: maintenanceMessage || 'System under maintenance. Please try again later.',
-        toggled_at: new Date().toISOString(),
-        toggled_by: req.user?.email
-      }),
-      req.user?.id
-    ]);
+    `,
+      [
+        JSON.stringify({
+          enabled,
+          message: maintenanceMessage || 'System under maintenance. Please try again later.',
+          toggled_at: new Date().toISOString(),
+          toggled_by: req.user?.email,
+        }),
+        req.user?.id,
+      ],
+    );
 
     if (enabled) {
       await redisClient.getClient().set('system:maintenance', '1');
@@ -987,7 +1082,7 @@ export async function toggleMaintenance(req: AuthRequest, res: Response): Promis
       adminId: req.user?.id,
       adminEmail: req.user?.email,
       enabled,
-      previousEnabled: previousState.enabled
+      previousEnabled: previousState.enabled,
     });
 
     res.json({
@@ -995,8 +1090,8 @@ export async function toggleMaintenance(req: AuthRequest, res: Response): Promis
       data: {
         maintenance_mode: enabled,
         message: maintenanceMessage || 'System under maintenance. Please try again later.',
-        previous_state: previousState.enabled
-      }
+        previous_state: previousState.enabled,
+      },
     });
   } catch (error) {
     logger.error('Error toggling maintenance mode:', error);

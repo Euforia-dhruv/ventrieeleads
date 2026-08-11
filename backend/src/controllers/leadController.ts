@@ -19,8 +19,8 @@ export async function listLeads(req: Request, res: Response): Promise<void> {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 50;
     const offset = (page - 1) * limit;
-    const sortBy = req.query.sortBy as string || 'created_at';
-    const sortOrder = req.query.sortOrder as string || 'DESC';
+    const sortBy = (req.query.sortBy as string) || 'created_at';
+    const sortOrder = (req.query.sortOrder as string) || 'DESC';
 
     // Smart filters (Module 7+8)
     const hasWebsite = req.query.hasWebsite as string;
@@ -63,16 +63,46 @@ export async function listLeads(req: Request, res: Response): Promise<void> {
     const params: any[] = [];
     let paramIndex = 1;
 
-    if (status) { query += ` AND l.status = $${paramIndex++}`; params.push(status); }
-    if (city) { query += ` AND c.city = $${paramIndex++}`; params.push(city); }
-    if (industry) { query += ` AND c.industry = $${paramIndex++}`; params.push(industry); }
-    if (area) { query += ` AND c.area = $${paramIndex++}`; params.push(area); }
-    if (minScore !== undefined && !isNaN(minScore)) { query += ` AND l.score >= $${paramIndex++}`; params.push(minScore); }
-    if (maxScore !== undefined && !isNaN(maxScore)) { query += ` AND l.score <= $${paramIndex++}`; params.push(maxScore); }
-    if (source) { query += ` AND l.source = $${paramIndex++}`; params.push(source); }
-    if (priority) { query += ` AND l.priority = $${paramIndex++}`; params.push(priority); }
-    if (minRating > 0) { query += ` AND c.rating >= $${paramIndex++}`; params.push(minRating); }
-    if (minReviews > 0) { query += ` AND c.review_count >= $${paramIndex++}`; params.push(minReviews); }
+    if (status) {
+      query += ` AND l.status = $${paramIndex++}`;
+      params.push(status);
+    }
+    if (city) {
+      query += ` AND c.city = $${paramIndex++}`;
+      params.push(city);
+    }
+    if (industry) {
+      query += ` AND c.industry = $${paramIndex++}`;
+      params.push(industry);
+    }
+    if (area) {
+      query += ` AND c.area = $${paramIndex++}`;
+      params.push(area);
+    }
+    if (minScore !== undefined && !isNaN(minScore)) {
+      query += ` AND l.score >= $${paramIndex++}`;
+      params.push(minScore);
+    }
+    if (maxScore !== undefined && !isNaN(maxScore)) {
+      query += ` AND l.score <= $${paramIndex++}`;
+      params.push(maxScore);
+    }
+    if (source) {
+      query += ` AND l.source = $${paramIndex++}`;
+      params.push(source);
+    }
+    if (priority) {
+      query += ` AND l.priority = $${paramIndex++}`;
+      params.push(priority);
+    }
+    if (minRating > 0) {
+      query += ` AND c.rating >= $${paramIndex++}`;
+      params.push(minRating);
+    }
+    if (minReviews > 0) {
+      query += ` AND c.review_count >= $${paramIndex++}`;
+      params.push(minReviews);
+    }
     if (search) {
       query += ` AND (c.name ILIKE $${paramIndex} OR c.website ILIKE $${paramIndex} OR c.industry ILIKE $${paramIndex} OR c.city ILIKE $${paramIndex})`;
       params.push(`%${search}%`);
@@ -99,18 +129,33 @@ export async function listLeads(req: Request, res: Response): Promise<void> {
       params.push(`%${technology}%`);
       paramIndex++;
     }
-    if (!isNaN(minWebsiteScore)) { query += ` AND a.overall_score >= $${paramIndex++}`; params.push(minWebsiteScore); }
-    if (!isNaN(maxWebsiteScore)) { query += ` AND a.overall_score <= $${paramIndex++}`; params.push(maxWebsiteScore); }
-    if (!isNaN(minSeoScore)) { query += ` AND a.seo_score >= $${paramIndex++}`; params.push(minSeoScore); }
-    if (!isNaN(minPerformanceScore)) { query += ` AND a.performance_score >= $${paramIndex++}`; params.push(minPerformanceScore); }
+    if (!isNaN(minWebsiteScore)) {
+      query += ` AND a.overall_score >= $${paramIndex++}`;
+      params.push(minWebsiteScore);
+    }
+    if (!isNaN(maxWebsiteScore)) {
+      query += ` AND a.overall_score <= $${paramIndex++}`;
+      params.push(maxWebsiteScore);
+    }
+    if (!isNaN(minSeoScore)) {
+      query += ` AND a.seo_score >= $${paramIndex++}`;
+      params.push(minSeoScore);
+    }
+    if (!isNaN(minPerformanceScore)) {
+      query += ` AND a.performance_score >= $${paramIndex++}`;
+      params.push(minPerformanceScore);
+    }
 
     // Opportunity filters
     if (noSSL === 'true') query += ` AND (a.checks->>'ssl' = 'false' OR a.checks->>'ssl' IS NULL)`;
-    if (noWhatsApp === 'true') query += ` AND (a.checks->>'has_whatsapp' = 'false' OR a.checks->>'has_whatsapp' IS NULL)`;
+    if (noWhatsApp === 'true')
+      query += ` AND (a.checks->>'has_whatsapp' = 'false' OR a.checks->>'has_whatsapp' IS NULL)`;
     if (noBooking === 'true') query += ` AND (a.checks->>'has_booking' = 'false' OR a.checks->>'has_booking' IS NULL)`;
     if (slowWebsite === 'true') query += ` AND (a.checks->>'load_time_seconds')::float > 3`;
-    if (noAnalytics === 'true') query += ` AND (a.checks->>'has_analytics' = 'false' OR a.checks->>'has_analytics' IS NULL)`;
-    if (noMetaPixel === 'true') query += ` AND (a.checks->>'has_meta_pixel' = 'false' OR a.checks->>'has_meta_pixel' IS NULL)`;
+    if (noAnalytics === 'true')
+      query += ` AND (a.checks->>'has_analytics' = 'false' OR a.checks->>'has_analytics' IS NULL)`;
+    if (noMetaPixel === 'true')
+      query += ` AND (a.checks->>'has_meta_pixel' = 'false' OR a.checks->>'has_meta_pixel' IS NULL)`;
     if (noContactForm === 'true') query += ` AND (a.checks->>'has_cta' = 'false' OR a.checks->>'has_cta' IS NULL)`;
     if (lowSEO === 'true') query += ` AND a.seo_score < 40`;
 
@@ -119,8 +164,11 @@ export async function listLeads(req: Request, res: Response): Promise<void> {
     const total = parseInt(countResult.rows[0].count);
 
     const allowedSorts: Record<string, string> = {
-      created_at: 'l.created_at', score: 'l.score', rating: 'c.rating',
-      review_count: 'c.review_count', company_name: 'c.name'
+      created_at: 'l.created_at',
+      score: 'l.score',
+      rating: 'c.rating',
+      review_count: 'c.review_count',
+      company_name: 'c.name',
     };
     const sortField = allowedSorts[sortBy] || 'l.created_at';
     const sortDir = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
@@ -137,8 +185,8 @@ export async function listLeads(req: Request, res: Response): Promise<void> {
         page,
         limit,
         total,
-        pages: Math.ceil(total / limit)
-      }
+        pages: Math.ceil(total / limit),
+      },
     });
   } catch (error) {
     logger.error('Error listing leads:', error);
@@ -151,7 +199,8 @@ export async function getLead(req: Request, res: Response): Promise<void> {
     const pool = getPool();
     const { id } = req.params;
 
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT l.*, c.name as company_name, c.website as company_website,
              c.industry, c.city, c.area, c.country, c.address, c.phone as company_phone,
              c.email as company_email, c.logo_url, c.rating, c.review_count,
@@ -165,7 +214,9 @@ export async function getLead(req: Request, res: Response): Promise<void> {
       LEFT JOIN companies c ON l.company_id = c.id
       LEFT JOIN websites w ON c.id = w.company_id
       WHERE l.id = $1 AND l.is_deleted = false
-    `, [id]);
+    `,
+      [id],
+    );
 
     if (result.rows.length === 0) {
       res.status(404).json({ success: false, message: 'Lead not found' });
@@ -176,19 +227,19 @@ export async function getLead(req: Request, res: Response): Promise<void> {
 
     const techs = await pool.query(
       'SELECT name, category, version, confidence FROM technologies WHERE company_id = $1',
-      [lead.company_id]
+      [lead.company_id],
     );
     lead.technologies = techs.rows;
 
     const audits = await pool.query(
       'SELECT * FROM audits WHERE website_id = (SELECT id FROM websites WHERE company_id = $1 LIMIT 1) ORDER BY created_at DESC LIMIT 1',
-      [lead.company_id]
+      [lead.company_id],
     );
     lead.audit = audits.rows[0] || null;
 
     const activities = await pool.query(
       'SELECT * FROM activities WHERE lead_id = $1 ORDER BY created_at DESC LIMIT 20',
-      [id]
+      [id],
     );
     lead.activities = activities.rows;
 
@@ -203,24 +254,37 @@ export async function addLead(req: Request, res: Response): Promise<void> {
   try {
     const pool = getPool();
     const {
-      company_name, company_website = '', location = '', city = '',
-      country = '', industry = '', phone = '', email = '',
-      address = '', description = '', status = 'New', source = 'manual'
+      company_name,
+      company_website = '',
+      city = '',
+      country = '',
+      industry = '',
+      phone = '',
+      email = '',
+      address = '',
+      status = 'New',
+      source = 'manual',
     } = req.body;
 
-    const companyResult = await pool.query(`
+    const companyResult = await pool.query(
+      `
       INSERT INTO companies (name, website, industry, city, country, address, phone, email, source)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING id
-    `, [company_name, company_website, industry, city, country, address, phone, email, source]);
+    `,
+      [company_name, company_website, industry, city, country, address, phone, email, source],
+    );
 
     const companyId = companyResult.rows[0].id;
 
-    const leadResult = await pool.query(`
+    const leadResult = await pool.query(
+      `
       INSERT INTO leads (workspace_id, company_id, status, source)
       VALUES ((SELECT id FROM workspaces LIMIT 1), $1, $2, $3)
       RETURNING *
-    `, [companyId, status, source]);
+    `,
+      [companyId, status, source],
+    );
 
     res.status(201).json({ success: true, data: leadResult.rows[0] });
   } catch (error) {
@@ -235,7 +299,17 @@ export async function updateLeadHandler(req: Request, res: Response): Promise<vo
     const { id } = req.params;
     const updates = req.body;
 
-    const allowedFields = ['status', 'score', 'score_label', 'notes', 'assigned_to', 'priority', 'tags', 'last_contacted_at', 'next_follow_up_at'];
+    const allowedFields = [
+      'status',
+      'score',
+      'score_label',
+      'notes',
+      'assigned_to',
+      'priority',
+      'tags',
+      'last_contacted_at',
+      'next_follow_up_at',
+    ];
     const sets: string[] = [];
     const values: any[] = [];
     let paramIndex = 1;
@@ -258,7 +332,7 @@ export async function updateLeadHandler(req: Request, res: Response): Promise<vo
 
     const result = await pool.query(
       `UPDATE leads SET ${sets.join(', ')} WHERE id = $${paramIndex} AND is_deleted = false RETURNING *`,
-      values
+      values,
     );
 
     if (result.rows.length === 0) {
@@ -280,7 +354,7 @@ export async function deleteLeadHandler(req: Request, res: Response): Promise<vo
 
     const result = await pool.query(
       'UPDATE leads SET is_deleted = true, updated_at = NOW() WHERE id = $1 RETURNING id',
-      [id]
+      [id],
     );
 
     if (result.rows.length === 0) {
@@ -303,9 +377,17 @@ export async function leadStats(req: Request, res: Response): Promise<void> {
     todayStart.setHours(0, 0, 0, 0);
 
     const [
-      total, byStatus, byIndustry, byCity, avgScore,
-      todayLeads, hotLeads, coldLeads, qualifiedLeads,
-      jobsRunning, jobsCompleted
+      total,
+      byStatus,
+      byIndustry,
+      byCity,
+      avgScore,
+      todayLeads,
+      hotLeads,
+      coldLeads,
+      qualifiedLeads,
+      jobsRunning,
+      jobsCompleted,
     ] = await Promise.all([
       pool.query('SELECT COUNT(*) FROM leads WHERE is_deleted = false'),
       pool.query('SELECT status, COUNT(*) as count FROM leads WHERE is_deleted = false GROUP BY status'),
@@ -323,9 +405,11 @@ export async function leadStats(req: Request, res: Response): Promise<void> {
       `),
       pool.query('SELECT AVG(score) as avg FROM leads WHERE is_deleted = false'),
       pool.query('SELECT COUNT(*) FROM leads WHERE is_deleted = false AND created_at >= $1', [todayStart]),
-      pool.query("SELECT COUNT(*) FROM leads WHERE is_deleted = false AND score >= 70"),
-      pool.query("SELECT COUNT(*) FROM leads WHERE is_deleted = false AND score < 40"),
-      pool.query("SELECT COUNT(*) FROM leads WHERE is_deleted = false AND status IN ('Qualified', 'Researching', 'Contacted', 'Replied', 'Meeting', 'Proposal', 'Negotiation', 'Won')"),
+      pool.query('SELECT COUNT(*) FROM leads WHERE is_deleted = false AND score >= 70'),
+      pool.query('SELECT COUNT(*) FROM leads WHERE is_deleted = false AND score < 40'),
+      pool.query(
+        "SELECT COUNT(*) FROM leads WHERE is_deleted = false AND status IN ('Qualified', 'Researching', 'Contacted', 'Replied', 'Meeting', 'Proposal', 'Negotiation', 'Won')",
+      ),
       pool.query("SELECT COUNT(*) FROM search_jobs WHERE status = 'running'"),
       pool.query("SELECT COUNT(*) FROM search_jobs WHERE status = 'completed'"),
     ]);
@@ -343,8 +427,8 @@ export async function leadStats(req: Request, res: Response): Promise<void> {
         avgLeadScore: parseFloat(avgScore.rows[0].avg || '0'),
         byStatus: Object.fromEntries(byStatus.rows.map((r: any) => [r.status, parseInt(r.count)])),
         byIndustry: Object.fromEntries(byIndustry.rows.map((r: any) => [r.industry, parseInt(r.count)])),
-        byCity: Object.fromEntries(byCity.rows.map((r: any) => [r.city, parseInt(r.count)]))
-      }
+        byCity: Object.fromEntries(byCity.rows.map((r: any) => [r.city, parseInt(r.count)])),
+      },
     });
   } catch (error) {
     logger.error('Error fetching lead stats:', error);

@@ -11,7 +11,7 @@ export class MinioClient {
       port: parseInt(process.env.MINIO_PORT || '9000'),
       useSSL: process.env.MINIO_USE_SSL === 'true',
       accessKey: process.env.MINIO_ACCESS_KEY || 'minioadmin',
-      secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin123'
+      secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin123',
     });
   }
 
@@ -21,7 +21,7 @@ export class MinioClient {
         process.env.MINIO_BUCKET_LEADS || 'leads',
         process.env.MINIO_BUCKET_SCREENSHOTS || 'screenshots',
         process.env.MINIO_BUCKET_LOGOS || 'logos',
-        process.env.MINIO_BUCKET_FILES || 'files'
+        process.env.MINIO_BUCKET_FILES || 'files',
       ];
 
       for (const bucket of buckets) {

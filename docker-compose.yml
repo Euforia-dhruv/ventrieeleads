@@ -113,11 +113,48 @@ services:
       - REDIS_URL=redis://redis:6379
       - PORT=8002
       - TIMEZONE=${TIMEZONE:-UTC}
+      - DATABASE_URL=postgresql://leads:leads_pass@postgres:5432/leads
+      # AI
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - AI_PRIMARY_PROVIDER=${AI_PRIMARY_PROVIDER:-gemini}
+      - AI_MODEL=${AI_MODEL:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
     stop_grace_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  lightpanda:
+    image: lightpanda/browser:nightly
+    command: lightpanda serve --host 0.0.0.0 --port 9222 --log-level warn
+    expose:
+      - "8080"
+      - "9222"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9222/json/version >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    stop_grace_period: 10s
     deploy:
       resources:
         limits:
@@ -133,13 +170,20 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.python
-    command: celery -A worker.celery_app worker --loglevel=info --concurrency=4 -Q scrape,audit,process
+    command: celery -A worker.celery_app worker --loglevel=info --concurrency=4 -Q scrape,audit,process,celery
     environment:
       - DATABASE_URL=postgresql://leads:leads_pass@postgres:5432/leads
       - REDIS_URL=redis://redis:6379
       - SCREENSHOTS_DIR=/app/data/screenshots
       - LOG_LEVEL=info
       - TIMEZONE=${TIMEZONE:-UTC}
+      # AI
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - AI_PRIMARY_PROVIDER=${AI_PRIMARY_PROVIDER:-gemini}
+      - AI_MODEL=${AI_MODEL:-}
       # Provider API Keys (Free tiers)
       - OUTSCRAPER_API_KEY=${OUTSCRAPER_API_KEY}
       - APOLLO_API_KEY=${APOLLO_API_KEY}
@@ -153,11 +197,15 @@ services:
       - LIGHTPANDA_URL=${LIGHTPANDA_URL:-http://lightpanda:8080}
       - LIGHTPANDA_CDP_URL=${LIGHTPANDA_CDP_URL:-ws://lightpanda:9222}
       - BROWSER_FALLBACK_CHAIN=${BROWSER_FALLBACK_CHAIN:-lightpanda,playwright,http}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      lightpanda:
+        condition: service_started
     volumes:
       - leads-data:/app/data
     restart: unless-stopped
@@ -181,12 +229,13 @@ services:
     environment:
       - DATABASE_URL=postgresql://leads:leads_pass@postgres:5432/leads
       - REDIS_URL=redis://redis:6379
+      # AI
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
+      - OLLAMA_URL=http://host.docker.internal:11434
       - AI_PRIMARY_PROVIDER=${AI_PRIMARY_PROVIDER:-gemini}
-      - AI_MODEL=${AI_MODEL:-gemini-1.5-flash}
+      - AI_MODEL=${AI_MODEL:-}
       - AI_FALLBACK_ENABLED=${AI_FALLBACK_ENABLED:-true}
       - LOG_LEVEL=info
       - TIMEZONE=${TIMEZONE:-UTC}
@@ -203,11 +252,15 @@ services:
       - LIGHTPANDA_URL=${LIGHTPANDA_URL:-http://lightpanda:8080}
       - LIGHTPANDA_CDP_URL=${LIGHTPANDA_CDP_URL:-ws://lightpanda:9222}
       - BROWSER_FALLBACK_CHAIN=${BROWSER_FALLBACK_CHAIN:-lightpanda,playwright,http}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      lightpanda:
+        condition: service_started
     restart: unless-stopped
     stop_grace_period: 30s
     deploy:
@@ -229,15 +282,18 @@ services:
     environment:
       - DATABASE_URL=postgresql://leads:leads_pass@postgres:5432/leads
       - REDIS_URL=redis://redis:6379
+      # AI
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
+      - OLLAMA_URL=http://host.docker.internal:11434
       - AI_PRIMARY_PROVIDER=${AI_PRIMARY_PROVIDER:-gemini}
-      - AI_MODEL=${AI_MODEL:-gemini-1.5-flash}
+      - AI_MODEL=${AI_MODEL:-}
       - AI_FALLBACK_ENABLED=${AI_FALLBACK_ENABLED:-true}
       - LOG_LEVEL=info
       - TIMEZONE=${TIMEZONE:-UTC}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -304,6 +360,8 @@ services:
       - ./backend/migration_notifications.sql:/docker-entrypoint-initdb.d/11-notifications.sql
       - ./backend/migration_data_protection.sql:/docker-entrypoint-initdb.d/12-data-protection.sql
       - ./backend/seed_locations_industries.sql:/docker-entrypoint-initdb.d/13-seed-data.sql
+      - ./backend/migration_fix_agent_tables.sql:/docker-entrypoint-initdb.d/14-fix-agent-tables.sql
+      - ./backend/phase7_migration.sql:/docker-entrypoint-initdb.d/15-phase7.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U leads -d leads"]
       interval: 10s

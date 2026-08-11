@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { logger } from '../core/logger';
-import { redisClient } from '../database/redis';
 
 // ── Constants ───────────────────────────────────────────────
 const CSRF_TOKEN_LENGTH = 32;
@@ -18,24 +17,25 @@ const ALLOWED_UPLOAD_TYPES: Record<string, string[]> = {
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.ms-excel',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'text/csv'
+    'text/csv',
   ],
-  archive: ['application/zip', 'application/x-rar-compressed', 'application/x-7z-compressed']
+  archive: ['application/zip', 'application/x-rar-compressed', 'application/x-7z-compressed'],
 };
 
 const DANGEROUS_PATTERNS = [
-  /(\%27)|(\')|(\-\-)|(\%23)|(#)/gi,
-  /((\%3C)|<)((\%2F)|\/)*[a-z0-9\%]+((\%3E)|>)/gi,
-  /((\%60)|`)/gi,
+  /(%27)|(')|(--)|(%23)|(#)/gi,
+  /((%3C)|<)((%2F)|\/)*[a-z0-9%]+((%3E)|>)/gi,
+  /((%60)|`)/gi,
   /javascript:/gi,
   /vbscript:/gi,
   /data:/gi,
   /on\w+\s*=/gi,
   /expression\s*\(/gi,
-  /(\%\x00)|\x00/g,
+  // eslint-disable-next-line no-control-regex
+  /(%\x00)|\x00/g,
   /\/etc\/passwd/gi,
   /\/etc\/shadow/gi,
-  /\/proc\/self/gi
+  /\/proc\/self/gi,
 ];
 
 const SQL_INJECTION_PATTERNS = [
@@ -47,7 +47,7 @@ const SQL_INJECTION_PATTERNS = [
   /\/\*[\s\S]*?\*\//g,
   /\bWAITFOR\b\s+\bDELAY\b/gi,
   /\bBENCHMARK\s*\(/gi,
-  /\bSLEEP\s*\(/gi
+  /\bSLEEP\s*\(/gi,
 ];
 
 // ── CSRF Protection ─────────────────────────────────────────
@@ -55,10 +55,7 @@ function generateCsrfToken(): string {
   const randomBytes = crypto.randomBytes(CSRF_TOKEN_LENGTH);
   const timestamp = Date.now().toString(16);
   const payload = randomBytes.toString('hex') + timestamp;
-  const signature = crypto
-    .createHmac('sha256', CSRF_SECRET)
-    .update(payload)
-    .digest('hex');
+  const signature = crypto.createHmac('sha256', CSRF_SECRET).update(payload).digest('hex');
   return `${payload}.${signature}`;
 }
 
@@ -69,10 +66,7 @@ function verifyCsrfToken(token: string): boolean {
   if (parts.length !== 2) return false;
 
   const [payload, signature] = parts;
-  const expectedSignature = crypto
-    .createHmac('sha256', CSRF_SECRET)
-    .update(payload)
-    .digest('hex');
+  const expectedSignature = crypto.createHmac('sha256', CSRF_SECRET).update(payload).digest('hex');
 
   if (signature !== expectedSignature) return false;
 
@@ -92,7 +86,7 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
       httpOnly: false,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      path: '/'
+      path: '/',
     });
     res.setHeader('X-CSRF-Token', token);
     next();
@@ -115,7 +109,7 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
       path: req.path,
       method: req.method,
       ip: req.ip,
-      userAgent: req.get('User-Agent')
+      userAgent: req.get('User-Agent'),
     });
     res.status(403).json({ success: false, message: 'CSRF token invalid or expired' });
     return;
@@ -158,7 +152,7 @@ export function cspHeaders(req: Request, res: Response, next: NextFunction): voi
     "form-action 'self'",
     "frame-ancestors 'none'",
     "base-uri 'self'",
-    "manifest-src 'self'"
+    "manifest-src 'self'",
   ];
 
   if (!isProduction) {
@@ -183,7 +177,7 @@ export function sqlInjectionProtection(req: Request, res: Response, next: NextFu
           path,
           value: value.substring(0, 100),
           ip: req.ip,
-          userAgent: req.get('User-Agent')
+          userAgent: req.get('User-Agent'),
         });
         return false;
       }
@@ -195,7 +189,7 @@ export function sqlInjectionProtection(req: Request, res: Response, next: NextFu
           path,
           value: value.substring(0, 100),
           ip: req.ip,
-          userAgent: req.get('User-Agent')
+          userAgent: req.get('User-Agent'),
         });
         return false;
       }
@@ -254,12 +248,8 @@ export interface FileValidationOptions {
 
 const DEFAULT_OPTIONS: FileValidationOptions = {
   maxSize: MAX_FILE_SIZE,
-  allowedTypes: [
-    ...ALLOWED_UPLOAD_TYPES.image,
-    ...ALLOWED_UPLOAD_TYPES.document,
-    ...ALLOWED_UPLOAD_TYPES.archive
-  ],
-  maxFiles: 5
+  allowedTypes: [...ALLOWED_UPLOAD_TYPES.image, ...ALLOWED_UPLOAD_TYPES.document, ...ALLOWED_UPLOAD_TYPES.archive],
+  maxFiles: 5,
 };
 
 function getFileExtension(filename: string): string {
@@ -299,7 +289,7 @@ export function fileUploadValidation(options: FileValidationOptions = {}) {
     if (opts.maxFiles && fileArray.length > opts.maxFiles) {
       res.status(400).json({
         success: false,
-        message: `Too many files. Maximum allowed: ${opts.maxFiles}`
+        message: `Too many files. Maximum allowed: ${opts.maxFiles}`,
       });
       return;
     }
@@ -308,7 +298,7 @@ export function fileUploadValidation(options: FileValidationOptions = {}) {
       if (opts.maxSize && file.size > opts.maxSize) {
         res.status(400).json({
           success: false,
-          message: `File "${file.originalname}" exceeds maximum size of ${Math.round(opts.maxSize / 1024 / 1024)}MB`
+          message: `File "${file.originalname}" exceeds maximum size of ${Math.round(opts.maxSize / 1024 / 1024)}MB`,
         });
         return;
       }
@@ -316,7 +306,7 @@ export function fileUploadValidation(options: FileValidationOptions = {}) {
       if (opts.allowedTypes && file.mimetype && !opts.allowedTypes.includes(file.mimetype)) {
         res.status(400).json({
           success: false,
-          message: `File type "${file.mimetype}" is not allowed`
+          message: `File type "${file.mimetype}" is not allowed`,
         });
         return;
       }
@@ -326,18 +316,32 @@ export function fileUploadValidation(options: FileValidationOptions = {}) {
         if (!opts.allowedExtensions.includes(ext)) {
           res.status(400).json({
             success: false,
-            message: `File extension ".${ext}" is not allowed`
+            message: `File extension ".${ext}" is not allowed`,
           });
           return;
         }
       }
 
-      const dangerousExtensions = ['exe', 'bat', 'cmd', 'sh', 'ps1', 'vbs', 'js', 'jar', 'msi', 'dll', 'scr', 'com', 'pif'];
+      const dangerousExtensions = [
+        'exe',
+        'bat',
+        'cmd',
+        'sh',
+        'ps1',
+        'vbs',
+        'js',
+        'jar',
+        'msi',
+        'dll',
+        'scr',
+        'com',
+        'pif',
+      ];
       const ext = getFileExtension(file.originalname);
       if (dangerousExtensions.includes(ext)) {
         res.status(400).json({
           success: false,
-          message: `File extension ".${ext}" is not allowed for security reasons`
+          message: `File extension ".${ext}" is not allowed for security reasons`,
         });
         return;
       }
@@ -356,7 +360,7 @@ export function fileUploadValidation(options: FileValidationOptions = {}) {
         size: file.size,
         mimetype: file.mimetype,
         category,
-        ip: req.ip
+        ip: req.ip,
       });
     }
 
@@ -439,7 +443,7 @@ export function inputLengthValidation(maxLengths: Record<string, number>) {
       if (typeof value === 'string' && value.length > maxLen) {
         res.status(400).json({
           success: false,
-          message: `Field "${field}" exceeds maximum length of ${maxLen} characters`
+          message: `Field "${field}" exceeds maximum length of ${maxLen} characters`,
         });
         return;
       }
@@ -478,7 +482,7 @@ export function requestSizeLimiter(maxSizeBytes: number) {
     if (contentLength > maxSizeBytes) {
       res.status(413).json({
         success: false,
-        message: `Request body exceeds maximum size of ${Math.round(maxSizeBytes / 1024)}KB`
+        message: `Request body exceeds maximum size of ${Math.round(maxSizeBytes / 1024)}KB`,
       });
       return;
     }
@@ -498,4 +502,11 @@ export function securityMiddleware(req: Request, res: Response, next: NextFuncti
   });
 }
 
-export { ALLOWED_UPLOAD_TYPES, DANGEROUS_PATTERNS, SQL_INJECTION_PATTERNS, CSRF_TOKEN_LENGTH, CSRF_COOKIE_NAME, CSRF_HEADER_NAME };
+export {
+  ALLOWED_UPLOAD_TYPES,
+  DANGEROUS_PATTERNS,
+  SQL_INJECTION_PATTERNS,
+  CSRF_TOKEN_LENGTH,
+  CSRF_COOKIE_NAME,
+  CSRF_HEADER_NAME,
+};

@@ -14,6 +14,7 @@ class GoodFirmsProvider(BaseProvider):
     slug = "goodfirms"
     description = "GoodFirms.co - top software development and service companies"
     requires_browser = False
+    supports_map_search = True
 
     BASE_URL = "https://www.goodfirms.co"
 

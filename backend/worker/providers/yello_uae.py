@@ -15,6 +15,7 @@ class YelloUAEProvider(BaseProvider):
     description = "Yello UAE - UAE business directory with contact details (UAE only)"
     requires_browser = False
     supported_countries = ["UAE"]
+    supports_map_search = True
 
     BASE_URL = "https://www.yello.ae"
 

@@ -23,7 +23,7 @@ export interface Lead {
   source: string;
   rating: number;
   review_count: number;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -84,7 +84,7 @@ export interface AuditReport {
   copywriting_score: number;
   trust_score: number;
   overall_score: number;
-  checks: Record<string, any>;
+  checks: Record<string, unknown>;
   issues: Array<{
     category: string;
     severity: 'low' | 'medium' | 'high' | 'critical';

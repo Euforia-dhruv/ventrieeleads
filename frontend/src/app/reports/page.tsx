@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FileText, Loader2, Download, Calendar } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { FileText, Loader2 } from 'lucide-react';
 
 interface Report {
   id: string;
@@ -18,16 +17,21 @@ export default function ReportsPage() {
   const [generating, setGenerating] = useState(false);
   const [selectedType, setSelectedType] = useState('executive');
 
-  useEffect(() => { fetchReports(); }, []);
+  useEffect(() => {
+    fetchReports();
+  }, []);
 
-  const fetchReports = async () => {
+  async function fetchReports() {
     setLoading(true);
     try {
       const res = await fetch('/api/reports');
       const data = await res.json();
       setReports(data.data || []);
-    } catch {} finally { setLoading(false); }
-  };
+    } catch {
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const generateReport = async () => {
     setGenerating(true);
@@ -38,7 +42,10 @@ export default function ReportsPage() {
         body: JSON.stringify({ type: selectedType }),
       });
       fetchReports();
-    } catch {} finally { setGenerating(false); }
+    } catch {
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const reportTypes = [
@@ -62,10 +69,17 @@ export default function ReportsPage() {
           onChange={(e) => setSelectedType(e.target.value)}
           className="h-9 px-3 bg-white/[0.04] border border-white/[0.06] rounded-lg text-[12px] text-white focus:outline-none appearance-none cursor-pointer"
         >
-          {reportTypes.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+          {reportTypes.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
         </select>
-        <button onClick={generateReport} disabled={generating}
-          className="flex items-center gap-1.5 px-4 h-9 bg-blue-600 hover:bg-blue-500 disabled:bg-[hsl(223,47%,11%)] disabled:text-[hsl(215,16%,35%)] text-white rounded-lg text-[12px] font-medium transition-all">
+        <button
+          onClick={generateReport}
+          disabled={generating}
+          className="flex items-center gap-1.5 px-4 h-9 bg-blue-600 hover:bg-blue-500 disabled:bg-[hsl(223,47%,11%)] disabled:text-[hsl(215,16%,35%)] text-white rounded-lg text-[12px] font-medium transition-all"
+        >
           {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
           Generate Report
         </button>
@@ -79,7 +93,11 @@ export default function ReportsPage() {
       ) : reports.length > 0 ? (
         <div className="space-y-2">
           {reports.map((r, i) => (
-            <div key={r.id} className="glass-card rounded-xl p-4 flex items-center justify-between animate-fade-in" style={{ animationDelay: `${i * 30}ms` }}>
+            <div
+              key={r.id}
+              className="glass-card rounded-xl p-4 flex items-center justify-between animate-fade-in"
+              style={{ animationDelay: `${i * 30}ms` }}
+            >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
                   <FileText className="w-5 h-5 text-purple-400" />

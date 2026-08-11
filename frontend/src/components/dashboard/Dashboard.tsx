@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Search, Users, Zap, BarChart3, ArrowUpRight, Clock, Building2, Star, TrendingUp } from 'lucide-react';
+import { Search, Users, Zap, BarChart3, ArrowUpRight } from 'lucide-react';
 import { cn, getScoreColor } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -20,28 +20,56 @@ interface DashboardStats {
   byCity: Record<string, number>;
 }
 
+interface RecentLead {
+  id: string;
+  company_name?: string;
+  industry?: string;
+  city?: string;
+  score?: number;
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [recentLeads, setRecentLeads] = useState<any[]>([]);
+  const [recentLeads, setRecentLeads] = useState<RecentLead[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/dashboard/stats').then(r => r.json()),
-      fetch('/api/leads?limit=5&sortBy=created_at&sortOrder=DESC').then(r => r.json()),
-    ]).then(([statsData, leadsData]) => {
-      setStats(statsData.data);
-      setRecentLeads(leadsData.data || []);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+      fetch('/api/dashboard/stats').then((r) => r.json()),
+      fetch('/api/leads?limit=5&sortBy=created_at&sortOrder=DESC').then((r) => r.json()),
+    ])
+      .then(([statsData, leadsData]) => {
+        setStats(statsData.data);
+        setRecentLeads(leadsData.data || []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
 
   const statCards = [
     { label: 'Total Leads', value: stats?.totalLeads ?? 0, icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-    { label: "Today's Finds", value: stats?.todayLeads ?? 0, icon: Search, color: 'text-purple-400', bg: 'bg-purple-500/10' },
-    { label: 'Running Jobs', value: stats?.jobsRunning ?? 0, icon: Zap, color: 'text-orange-400', bg: 'bg-orange-500/10' },
-    { label: 'Avg Score', value: Math.round(stats?.avgLeadScore ?? 0), icon: BarChart3, color: 'text-green-400', bg: 'bg-green-500/10' },
+    {
+      label: "Today's Finds",
+      value: stats?.todayLeads ?? 0,
+      icon: Search,
+      color: 'text-purple-400',
+      bg: 'bg-purple-500/10',
+    },
+    {
+      label: 'Running Jobs',
+      value: stats?.jobsRunning ?? 0,
+      icon: Zap,
+      color: 'text-orange-400',
+      bg: 'bg-orange-500/10',
+    },
+    {
+      label: 'Avg Score',
+      value: Math.round(stats?.avgLeadScore ?? 0),
+      icon: BarChart3,
+      color: 'text-green-400',
+      bg: 'bg-green-500/10',
+    },
   ];
 
   return (
@@ -66,11 +94,15 @@ export default function Dashboard() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {statCards.map((card, i) => (
-          <div key={card.label} className="glass-card rounded-xl p-4 animate-fade-in" style={{ animationDelay: `${i * 50}ms` }}>
+          <div
+            key={card.label}
+            className="glass-card rounded-xl p-4 animate-fade-in"
+            style={{ animationDelay: `${i * 50}ms` }}
+          >
             <div className="flex items-center justify-between mb-3">
               <span className="text-[12px] text-[hsl(215,16%,50%)] font-medium">{card.label}</span>
-              <div className={cn("p-1.5 rounded-lg", card.bg)}>
-                <card.icon className={cn("w-4 h-4", card.color)} />
+              <div className={cn('p-1.5 rounded-lg', card.bg)}>
+                <card.icon className={cn('w-4 h-4', card.color)} />
               </div>
             </div>
             <p className="text-[24px] font-bold text-white">{loading ? '—' : card.value.toLocaleString()}</p>
@@ -83,13 +115,16 @@ export default function Dashboard() {
         <div className="lg:col-span-2 glass-card rounded-xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.04]">
             <h2 className="text-[13px] font-semibold text-white">Recent Leads</h2>
-            <Link href="/leads" className="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
+            <Link
+              href="/leads"
+              className="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors"
+            >
               View all <ArrowUpRight className="w-3 h-3" />
             </Link>
           </div>
           <div className="divide-y divide-white/[0.03]">
             {loading ? (
-              [1, 2, 3].map(i => (
+              [1, 2, 3].map((i) => (
                 <div key={i} className="px-4 py-3 animate-pulse">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-white/[0.04]" />
@@ -101,7 +136,7 @@ export default function Dashboard() {
                 </div>
               ))
             ) : recentLeads.length > 0 ? (
-              recentLeads.map((lead: any) => (
+              recentLeads.map((lead: RecentLead) => (
                 <Link
                   key={lead.id}
                   href={`/leads/${lead.id}`}
@@ -114,12 +149,15 @@ export default function Dashboard() {
                     <div>
                       <p className="text-[13px] font-medium text-white">{lead.company_name}</p>
                       <p className="text-[11px] text-[hsl(215,16%,45%)]">
-                        {lead.industry || 'Unknown'}{lead.city ? ` · ${lead.city}` : ''}
+                        {lead.industry || 'Unknown'}
+                        {lead.city ? ` · ${lead.city}` : ''}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={cn("text-[13px] font-semibold", getScoreColor(lead.score || 0))}>{lead.score || 0}</span>
+                    <span className={cn('text-[13px] font-semibold', getScoreColor(lead.score || 0))}>
+                      {lead.score || 0}
+                    </span>
                     <ArrowUpRight className="w-3.5 h-3.5 text-[hsl(215,16%,30%)]" />
                   </div>
                 </Link>
@@ -138,12 +176,14 @@ export default function Dashboard() {
           <div className="glass-card rounded-xl p-4">
             <h2 className="text-[13px] font-semibold text-white mb-3">Pipeline</h2>
             <div className="space-y-2">
-              {stats?.byStatus ? Object.entries(stats.byStatus).map(([status, count]) => (
-                <div key={status} className="flex items-center justify-between">
-                  <span className="text-[12px] text-[hsl(215,20%,55%)]">{status}</span>
-                  <span className="text-[12px] font-medium text-white">{count}</span>
-                </div>
-              )) : (
+              {stats?.byStatus ? (
+                Object.entries(stats.byStatus).map(([status, count]) => (
+                  <div key={status} className="flex items-center justify-between">
+                    <span className="text-[12px] text-[hsl(215,20%,55%)]">{status}</span>
+                    <span className="text-[12px] font-medium text-white">{count}</span>
+                  </div>
+                ))
+              ) : (
                 <p className="text-[12px] text-[hsl(215,16%,35%)]">No pipeline data yet</p>
               )}
             </div>
@@ -153,20 +193,25 @@ export default function Dashboard() {
           <div className="glass-card rounded-xl p-4">
             <h2 className="text-[13px] font-semibold text-white mb-3">Top Industries</h2>
             <div className="space-y-2">
-              {stats?.byIndustry ? Object.entries(stats.byIndustry)
-                .sort(([, a], [, b]) => b - a)
-                .slice(0, 5)
-                .map(([industry, count]) => (
-                <div key={industry} className="flex items-center justify-between">
-                  <span className="text-[12px] text-[hsl(215,20%,55%)] truncate">{industry}</span>
-                  <div className="flex items-center gap-2">
-                    <div className="w-16 h-1 bg-white/[0.06] rounded-full overflow-hidden">
-                      <div className="h-full bg-blue-500 rounded-full" style={{ width: `${(count / (stats?.totalLeads || 1)) * 100}%` }} />
+              {stats?.byIndustry ? (
+                Object.entries(stats.byIndustry)
+                  .sort(([, a], [, b]) => b - a)
+                  .slice(0, 5)
+                  .map(([industry, count]) => (
+                    <div key={industry} className="flex items-center justify-between">
+                      <span className="text-[12px] text-[hsl(215,20%,55%)] truncate">{industry}</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-16 h-1 bg-white/[0.06] rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-blue-500 rounded-full"
+                            style={{ width: `${(count / (stats?.totalLeads || 1)) * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-[11px] font-medium text-white w-5 text-right">{count}</span>
+                      </div>
                     </div>
-                    <span className="text-[11px] font-medium text-white w-5 text-right">{count}</span>
-                  </div>
-                </div>
-              )) : (
+                  ))
+              ) : (
                 <p className="text-[12px] text-[hsl(215,16%,35%)]">No data yet</p>
               )}
             </div>

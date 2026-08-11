@@ -29,12 +29,12 @@ class EmailAgent {
         { step: 1, subject: primary.subject, body: primary.body, delay: 0, status: 'pending' },
         { step: 2, subject: followUp1.subject, body: followUp1.body, delay: 3, status: 'pending' },
         { step: 3, subject: followUp2.subject, body: followUp2.body, delay: 7, status: 'pending' },
-        { step: 4, subject: followUp3.subject, body: followUp3.body, delay: 14, status: 'pending' }
-      ]
+        { step: 4, subject: followUp3.subject, body: followUp3.body, delay: 14, status: 'pending' },
+      ],
     };
   }
 
-  async sendEmail(leadId: number, step: number, email: EmailSequence['emails'][0]): Promise<boolean> {
+  async sendEmail(leadId: number, step: number, _email: EmailSequence['emails'][0]): Promise<boolean> {
     logger.info(`EmailAgent: Sending email step ${step} for lead ${leadId}`);
     // In production, integrate with an email service (SES, SendGrid, etc.)
     return true;
@@ -56,7 +56,7 @@ class EmailAgent {
       '{{industry}}': leadData.industry || '',
       '{{name}}': leadData.contact_name || '',
       '{{website}}': leadData.company_website || '',
-      '{{phone}}': leadData.phone || ''
+      '{{phone}}': leadData.phone || '',
     };
 
     let result = template;

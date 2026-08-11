@@ -182,6 +182,8 @@ class BaseAgent(ABC):
                       relationship: str, weight: float = 1.0,
                       metadata: dict = None):
         """Create or update a knowledge graph edge."""
+        if source_id is None or target_id is None:
+            return
         from worker.models import KnowledgeEdge
         existing = self.db.query(KnowledgeEdge).filter(
             KnowledgeEdge.source_type == source_type,
@@ -342,22 +344,32 @@ class BaseAgent(ABC):
 
     def update_state(self, status: str = None, reasoning: str = None,
                      confidence: float = None, goals: list = None):
-        """Update this agent's state."""
+        """Update this agent's state, creating the row if it doesn't exist yet."""
         from worker.models import AgentState
         state = self.db.query(AgentState).filter(
             AgentState.agent_name == self.name
         ).first()
-        if state:
-            if status:
-                state.status = status
-            if reasoning:
-                state.reasoning = reasoning
-            if confidence is not None:
-                state.confidence = confidence
-            if goals is not None:
-                state.goals = goals
-            state.updated_at = datetime.utcnow()
+        if not state:
+            state = AgentState(
+                agent_name=self.name,
+                status=status or 'idle',
+                goals=goals or self.get_goals(),
+                confidence=confidence or 0.0,
+                reasoning=reasoning or '',
+            )
+            self.db.add(state)
             self.db.commit()
+            return
+        if status:
+            state.status = status
+        if reasoning:
+            state.reasoning = reasoning
+        if confidence is not None:
+            state.confidence = confidence
+        if goals is not None:
+            state.goals = goals
+        state.updated_at = datetime.utcnow()
+        self.db.commit()
 
     # ── Main Execution ────────────────────────────────────────────────
 

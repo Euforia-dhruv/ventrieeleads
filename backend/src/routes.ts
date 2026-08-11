@@ -1,92 +1,211 @@
 import express, { Router } from 'express';
 import { authenticate, requireRole } from './middleware/auth';
 import {
-  register, login, logout, logoutAll, me, refreshToken,
-  forgotPassword, resetPassword, changePassword,
-  verifyEmail, sendVerificationEmail,
-  requestMagicLink, verifyMagicLink,
-  getSessions, revokeSession, updateProfile, oauthCallback,
-  googleAuth, googleCallback
+  register,
+  login,
+  logout,
+  logoutAll,
+  me,
+  refreshToken,
+  forgotPassword,
+  resetPassword,
+  changePassword,
+  verifyEmail,
+  sendVerificationEmail,
+  requestMagicLink,
+  verifyMagicLink,
+  getSessions,
+  revokeSession,
+  updateProfile,
+  oauthCallback,
+  googleAuth,
+  googleCallback,
 } from './controllers/authController';
 import { listApiKeys, createApiKey, revokeApiKey } from './controllers/apiKeyController';
 import {
-  listLeads, getLead, addLead, updateLeadHandler, deleteLeadHandler, leadStats
+  listLeads,
+  getLead,
+  addLead,
+  updateLeadHandler,
+  deleteLeadHandler,
+  leadStats,
 } from './controllers/leadController';
 import {
-  listCampaigns, createCampaign, updateCampaign, deleteCampaign,
-  addLeadToCampaign, removeLeadFromCampaign, getCampaignLeads
+  listCampaigns,
+  createCampaign,
+  updateCampaign,
+  deleteCampaign,
+  addLeadToCampaign,
+  removeLeadFromCampaign,
+  getCampaignLeads,
 } from './controllers/campaignController';
+import { createSearchJob, listSearchJobs, getSearchJob, cancelSearchJob } from './controllers/searchController';
 import {
-  createSearchJob, listSearchJobs, getSearchJob, cancelSearchJob
-} from './controllers/searchController';
-import {
-  getCompanyContacts, getCompanyTechnologies, getCompanyAudit,
-  enrichCompany, getCompanyDetail
+  getCompanyContacts,
+  getCompanyTechnologies,
+  getCompanyAudit,
+  enrichCompany,
+  getCompanyDetail,
 } from './controllers/companyController';
 import { exportLeads, getExportHistory } from './controllers/exportController';
 import {
-  listScheduledSearches, createScheduledSearch, updateScheduledSearch,
-  deleteScheduledSearch, runScheduledSearchNow
+  listScheduledSearches,
+  createScheduledSearch,
+  updateScheduledSearch,
+  deleteScheduledSearch,
+  runScheduledSearchNow,
 } from './controllers/scheduledSearchController';
-import { getChangeHistory, getLeadTimeline, getLeadTasks, createLeadTask, updateLeadTask, addLeadNote } from './controllers/crmController';
 import {
-  listNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification
+  getChangeHistory,
+  getLeadTimeline,
+  getLeadTasks,
+  createLeadTask,
+  updateLeadTask,
+  addLeadNote,
+} from './controllers/crmController';
+import {
+  listNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  deleteNotification,
 } from './controllers/notificationController';
 import { listPresets, createPreset, deletePreset } from './controllers/presetController';
 import { listSettings, updateSetting } from './controllers/adminController';
 import {
-  listAdminUsers, updateUserRole, softDeleteUser,
-  listWorkspaces, updateWorkspace,
-  getProviderConfigs, updateProviderConfig,
-  getQueueStatus, getWorkerDetails,
-  getStorageStats, getAuditLogs,
-  getBackupHistory, createBackup,
-  getSystemMetrics, getDatabaseStats,
-  toggleMaintenance
+  listAdminUsers,
+  updateUserRole,
+  softDeleteUser,
+  listWorkspaces,
+  updateWorkspace,
+  getProviderConfigs,
+  updateProviderConfig,
+  getQueueStatus,
+  getWorkerDetails,
+  getStorageStats,
+  getAuditLogs,
+  getBackupHistory,
+  createBackup,
+  getSystemMetrics,
+  getDatabaseStats,
+  toggleMaintenance,
 } from './controllers/adminCenterController';
 import { getOpportunity, estimateOpportunity } from './controllers/opportunityController';
-import { getProviderList, triggerResearch, getResearch, triggerCompetitorAnalysis, getCompetitorAnalysis } from './controllers/researchController';
-import { getMonitoringSchedule, updateMonitoringSchedule, triggerMonitoringCheck, getMonitoringHistory } from './controllers/monitoringController';
+import {
+  getProviderList,
+  getCompanyDiscoveryConfig,
+  triggerResearch,
+  getResearch,
+  triggerCompetitorAnalysis,
+  getCompetitorAnalysis,
+} from './controllers/researchController';
+import {
+  getMonitoringSchedule,
+  updateMonitoringSchedule,
+  triggerMonitoringCheck,
+  getMonitoringHistory,
+} from './controllers/monitoringController';
 import { listReports, generateReport, getReport } from './controllers/reportController';
 import {
-  generateProposal, listProposals, getProposal, generateCopy, generateRedesign,
-  getCompanyTimeline, getSalesPlaybook, getExecutiveStats
+  generateProposal,
+  listProposals,
+  getProposal,
+  generateCopy,
+  generateRedesign,
+  getCompanyTimeline,
+  getSalesPlaybook,
+  getExecutiveStats,
 } from './controllers/platformController';
 import {
-  listAgents, getAgent, runAgent, runAllAgents, getAgentExecutions, getAgentMemory,
-  getKnowledgeGraph, getExecutiveBriefings, generateBriefing, intelligentSearch,
-  getAgentEvents, getQualityMetrics, getAgentHealthSummary
+  listAgents,
+  getAgent,
+  runAgent,
+  runAllAgents,
+  getAgentExecutions,
+  getAgentMemory,
+  getKnowledgeGraph,
+  getExecutiveBriefings,
+  generateBriefing,
+  intelligentSearch,
+  getAgentEvents,
+  getQualityMetrics,
+  getAgentHealthSummary,
 } from './controllers/agentController';
 import {
-  searchLocations, listLocations, getLocationTree, createLocation, updateLocation, deleteLocation,
+  searchLocations,
+  listLocations,
+  getLocationTree,
+  createLocation,
+  updateLocation,
+  deleteLocation,
   getLocationsByCountry,
-  listIndustries, getIndustryTree, createIndustry, updateIndustry, deleteIndustry
+  listIndustries,
+  getIndustryTree,
+  createIndustry,
+  updateIndustry,
+  deleteIndustry,
 } from './controllers/locationIndustryController';
 import {
-  listDiscoveryCampaigns, getDiscoveryCampaign, createDiscoveryCampaign,
-  updateDiscoveryCampaign, deleteDiscoveryCampaign,
-  activateDiscoveryCampaign, pauseDiscoveryCampaign,
-  getCampaignJobs, retryCampaignJobs,
-  getCoverageStats, getCountryCoverage, getIndustryCoverage,
-  getDiscoveryHealth, getProviderHealth, getCostStats
+  listDiscoveryCampaigns,
+  getDiscoveryCampaign,
+  createDiscoveryCampaign,
+  updateDiscoveryCampaign,
+  deleteDiscoveryCampaign,
+  activateDiscoveryCampaign,
+  pauseDiscoveryCampaign,
+  getCampaignJobs,
+  retryCampaignJobs,
+  getCoverageStats,
+  getCountryCoverage,
+  getIndustryCoverage,
+  getDiscoveryHealth,
+  getProviderHealth,
+  getCostStats,
 } from './controllers/campaignOrchestratorController';
 import {
-  getDiscoveryIntelligence, getProviderIntelligence, getMarketIntelligence,
-  getOpportunityIntelligence, getHeatmapData, getPredictiveDiscovery,
-  getPipelineOptimizations, getEconomicsData, getBenchmarks,
-  getExecutiveReport, generateExecutiveReport
+  getDiscoveryIntelligence,
+  getProviderIntelligence,
+  getMarketIntelligence,
+  getOpportunityIntelligence,
+  getHeatmapData,
+  getPredictiveDiscovery,
+  getPipelineOptimizations,
+  getEconomicsData,
+  getBenchmarks,
+  getExecutiveReport,
+  generateExecutiveReport,
 } from './controllers/intelligenceCenterController';
 import {
-  getPipelineStages, getPipelineOverview, getLeadPipeline,
-  transitionLeadPipeline, getPipelineStats,
-  getClientReadiness, computeClientReadiness, getTopProspects,
-  getNegotiationProfile, generateNegotiationProfile,
-  listAutomationRules, createAutomationRule, toggleAutomationRule,
-  deleteAutomationRule, getAutomationExecutions, getAutomationStats,
+  getPipelineStages,
+  getPipelineOverview,
+  getPipelineBoard,
+  getLeadPipeline,
+  transitionLeadPipeline,
+  getPipelineStats,
+  getClientReadiness,
+  computeClientReadiness,
+  getTopProspects,
+  getNegotiationProfile,
+  generateNegotiationProfile,
+  listAutomationRules,
+  createAutomationRule,
+  toggleAutomationRule,
+  deleteAutomationRule,
+  getAutomationExecutions,
+  getAutomationStats,
   getImprovementReports,
-  getSystemOverview, getMetricsHistory, getMorningBriefing, triggerMorningBriefing,
-  getLearningSignals, getLearningPerformance, recordLearningSignal,
+  getSystemOverview,
+  getMetricsHistory,
+  getMorningBriefing,
+  triggerMorningBriefing,
+  getLearningSignals,
+  getLearningPerformance,
+  recordLearningSignal,
 } from './controllers/modulesController';
+import {
+  generateOutreach,
+  getLeadOutreachHistory,
+  recordOutreach,
+} from './controllers/outreachController';
 
 export function setupRoutes(): Router {
   const router = express.Router();
@@ -97,7 +216,7 @@ export function setupRoutes(): Router {
       status: 'ok',
       timestamp: new Date().toISOString(),
       version: '3.0.0',
-      services: { database: 'connected', redis: 'connected', minio: 'initialized', browser: 'ready' }
+      services: { database: 'connected', redis: 'connected', minio: 'initialized', browser: 'ready' },
     });
   });
 
@@ -157,6 +276,11 @@ export function setupRoutes(): Router {
   router.post('/leads/:id/notes', addLeadNote);
   router.put('/leads/:id/tasks/:taskId', updateLeadTask);
 
+  // Outreach
+  router.post('/outreach/generate', generateOutreach);
+  router.get('/leads/:id/outreach', getLeadOutreachHistory);
+  router.post('/leads/:id/outreach', recordOutreach);
+
   // Campaigns
   router.route('/campaigns').get(listCampaigns).post(createCampaign);
   router.route('/campaigns/:id').put(updateCampaign).delete(deleteCampaign);
@@ -165,21 +289,7 @@ export function setupRoutes(): Router {
   router.delete('/campaigns/:id/leads/:leadId', removeLeadFromCampaign);
 
   // Companies
-  router.get('/companies', (req, res) => {
-    res.json({
-      message: 'Company discovery service',
-      sources: ['Google Maps', 'Clutch', 'GoodFirms', 'DesignRush'],
-      availableIndustries: [
-        'Hotels', 'Restaurants', 'Cafes', 'Medical Clinics', 'Hospitals', 'Dentists',
-        'Real Estate', 'Construction', 'Interior Designers', 'Architects', 'Gyms',
-        'Salons', 'Spas', 'Car Showrooms', 'Law Firms', 'Accounting Firms',
-        'Travel Agencies', 'Education', 'IT Companies', 'Marketing Agencies',
-        'Ecommerce', 'Retail', 'Jewellery', 'Luxury Brands', 'Furniture',
-        'Manufacturing', 'Logistics'
-      ],
-      availableLocations: {}
-    });
-  });
+  router.get('/companies', getCompanyDiscoveryConfig);
   router.get('/companies/:id', getCompanyDetail);
   router.get('/companies/:id/contacts', getCompanyContacts);
   router.get('/companies/:id/technologies', getCompanyTechnologies);
@@ -295,11 +405,21 @@ export function setupRoutes(): Router {
   router.get('/agents/status', (req, res) => {
     res.json({
       agents: {
-        scout: 'ready', scraper: 'ready', browser: 'ready', research: 'ready',
-        audit: 'ready', techStack: 'ready', seo: 'ready', copywriting: 'ready',
-        proposal: 'ready', email: 'ready', linkedIn: 'ready', crm: 'ready', analytics: 'ready'
+        scout: 'ready',
+        scraper: 'ready',
+        browser: 'ready',
+        research: 'ready',
+        audit: 'ready',
+        techStack: 'ready',
+        seo: 'ready',
+        copywriting: 'ready',
+        proposal: 'ready',
+        email: 'ready',
+        linkedIn: 'ready',
+        crm: 'ready',
+        analytics: 'ready',
       },
-      browsers: { lightpanda: 'ready', playwright: 'ready (fallback)' }
+      browsers: { lightpanda: 'ready', playwright: 'ready (fallback)' },
     });
   });
 
@@ -342,7 +462,11 @@ export function setupRoutes(): Router {
 
   // Discovery Orchestrator
   router.route('/discovery-campaigns').get(listDiscoveryCampaigns).post(createDiscoveryCampaign);
-  router.route('/discovery-campaigns/:id').get(getDiscoveryCampaign).put(updateDiscoveryCampaign).delete(deleteDiscoveryCampaign);
+  router
+    .route('/discovery-campaigns/:id')
+    .get(getDiscoveryCampaign)
+    .put(updateDiscoveryCampaign)
+    .delete(deleteDiscoveryCampaign);
   router.post('/discovery-campaigns/:id/activate', activateDiscoveryCampaign);
   router.post('/discovery-campaigns/:id/pause', pauseDiscoveryCampaign);
   router.get('/discovery-campaigns/:id/jobs', getCampaignJobs);
@@ -376,6 +500,7 @@ export function setupRoutes(): Router {
   // AI Sales Pipeline
   router.get('/pipeline/stages', getPipelineStages);
   router.get('/pipeline/overview', getPipelineOverview);
+  router.get('/pipeline/board', getPipelineBoard);
   router.get('/pipeline/stats', getPipelineStats);
   router.get('/pipeline/leads/:leadId', getLeadPipeline);
   router.post('/pipeline/leads/:leadId/transition', transitionLeadPipeline);

@@ -1,77 +1,81 @@
 import pytest
-import pytest_asyncio
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from worker.agents.base import BaseAgent, AgentEvent
+from worker.agents.scout import ScoutAgent
 
-pytest_plugins = ('tests.conftest',)
 
-class TestLeadModel:
-    async def test_create_lead(self, async_session):
-        from src.database.models import Lead
-        lead = Lead(
-            company_name="Test Company",
-            city="Dubai",
-            country="AE",
-            industry="IT Companies",
-            status="New"
+class TestAgentEvent:
+    def test_event_initializes(self):
+        event = AgentEvent("companies.discovered", "scout", {"count": 5})
+        assert event.event_type == "companies.discovered"
+        assert event.source_agent == "scout"
+        assert event.status == "pending"
+        assert event.id
+
+    def test_event_to_dict(self):
+        event = AgentEvent("test.event", "agent", {"k": "v"}, target_agent="other")
+        data = event.to_dict()
+        assert data["event_type"] == "test.event"
+        assert data["target_agent"] == "other"
+        assert data["payload"] == {"k": "v"}
+        assert "created_at" in data
+
+
+class TestBaseAgent:
+    class ConcreteAgent(BaseAgent):
+        def execute(self, context):
+            return {"items_processed": 0, "items_created": 0}
+
+        def get_goals(self):
+            return ["goal"]
+
+    def test_calculate_confidence_bounds(self):
+        agent = self.ConcreteAgent()
+        assert 0.0 <= agent.calculate_confidence({"data_quality": 1.0}) <= 1.0
+
+    def test_calculate_confidence_empty(self):
+        agent = self.ConcreteAgent()
+        assert agent.calculate_confidence({}) == 0.0
+
+    def test_calculate_confidence_clamps(self):
+        agent = self.ConcreteAgent()
+        assert agent.calculate_confidence({"data_quality": 5.0}) <= 1.0
+        assert agent.calculate_confidence({"data_quality": -1.0}) >= 0.0
+
+    def test_calculate_confidence_high_factors(self):
+        agent = self.ConcreteAgent()
+        confidence = agent.calculate_confidence(
+            {"data_quality": 1.0, "completeness": 1.0, "recency": 1.0, "consistency": 1.0, "sample_size": 1.0}
         )
-        async_session.add(lead)
-        await async_session.commit()
-        assert lead.id is not None
+        assert confidence == 1.0
 
-    async def test_lead_status_values(self):
-        from src.database.models import Lead
-        valid_statuses = [
-            'New', 'Qualified', 'Researching', 'Contacted',
-            'Replied', 'Meeting', 'Proposal', 'Negotiation',
-            'Won', 'Lost'
-        ]
-        for status in valid_statuses:
-            lead = Lead(company_name=f"Test {status}", status=status)
-            assert lead.status == status
+    def test_name_default(self):
+        assert BaseAgent.name == "base"
+        assert BaseAgent.version == "1.0.0"
 
-class TestLeadQueries:
-    async def test_get_leads(self, async_session):
-        from src.database.queries import getLeads
-        results = await getLeads(async_session)
-        assert isinstance(results, list)
 
-    async def test_create_lead_query(self, async_session):
-        from src.database.queries import createLead
-        lead_data = {
-            "company_name": "Query Test",
-            "city": "Dubai",
-            "country": "AE"
-        }
-        result = await createLead(async_session, lead_data)
-        assert result.company_name == "Query Test"
-
-class TestAIIntegration:
-    def test_ai_integration_exists(self):
-        from src.ai.integrations import AIIntegration
-        ai = AIIntegration()
-        assert ai.settings.provider == 'ollama'
-
-    def test_scout_agent_exists(self):
-        from src.agents.scoutAgent import ScoutAgent
+class TestScoutAgent:
+    def test_agent_initializes(self):
         agent = ScoutAgent()
-        assert agent is not None
+        assert agent.name == "scout"
+        assert agent.description == "Discovers new businesses from directory providers"
 
-    def test_audit_agent_exists(self):
-        from src.agents.auditAgent import AuditAgent
-        agent = AuditAgent()
-        assert agent is not None
+    def test_goals(self):
+        agent = ScoutAgent()
+        goals = agent.get_goals()
+        assert len(goals) >= 3
+        assert any("Discover" in g for g in goals)
 
-class TestScoring:
-    def test_score_color_classification(self):
-        from src.lib.utils import getScoreColor
-        assert getScoreColor(85) == 'text-green-500'
-        assert getScoreColor(65) == 'text-yellow-500'
-        assert getScoreColor(45) == 'text-orange-500'
-        assert getScoreColor(25) == 'text-red-500'
+    def test_instance_exported(self):
+        from worker.agents.scout import scout_agent
+        assert scout_agent.name == "scout"
 
-    def test_status_colors(self):
-        from src.lib.utils import statusColors
-        assert 'bg-blue-500' in statusColors('New')
-        assert 'bg-green-500' in statusColors('Won')
-        assert 'bg-red-500' in statusColors('Lost')
+
+class TestLeadScoringServiceIntegration:
+    def test_scoring_service_instantiable(self):
+        from worker.services.scoring import lead_scorer
+        assert lead_scorer is not None
+
+    def test_scoring_service_exports_labels(self):
+        from worker.services.scoring import LeadScoringService
+        result = LeadScoringService().score(website_score=10)
+        assert result["label"] in ("hot", "warm", "cold")

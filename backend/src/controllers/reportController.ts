@@ -8,7 +8,7 @@ export const listReports = async (req: Request, res: Response): Promise<void> =>
     const result = await pool.query(
       `SELECT * FROM reports
        WHERE is_deleted = false
-       ORDER BY created_at DESC LIMIT 100`
+       ORDER BY created_at DESC LIMIT 100`,
     );
     res.json({ success: true, data: result.rows });
   } catch (error) {
@@ -37,10 +37,7 @@ export const getReport = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const pool = getPool();
-    const result = await pool.query(
-      `SELECT * FROM reports WHERE id = $1 AND is_deleted = false`,
-      [id]
-    );
+    const result = await pool.query(`SELECT * FROM reports WHERE id = $1 AND is_deleted = false`, [id]);
     if (result.rows.length === 0) {
       res.status(404).json({ success: false, message: 'Report not found' });
       return;

@@ -2,8 +2,6 @@ import { Server as HttpServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { verifyToken } from '../middleware/auth';
 import { logger } from '../core/logger';
-import { redisClient } from '../database/redis';
-import { getPool } from '../database/connection';
 
 interface AuthenticatedSocket extends WebSocket {
   userId?: string;
@@ -53,7 +51,9 @@ class WebSocketManager {
     ws.isAlive = true;
     ws.subscriptions = new Set();
 
-    ws.on('pong', () => { ws.isAlive = true; });
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
 
     const url = new URL(req.url || '', `http://${req.headers.host}`);
     const token = url.searchParams.get('token') || req.headers.authorization?.replace('Bearer ', '');
@@ -65,7 +65,9 @@ class WebSocketManager {
           ws.userId = decoded.id;
           ws.workspaceId = decoded.workspace_id;
           this.addClient(ws);
-          ws.send(JSON.stringify({ type: 'connected', data: { userId: decoded.id, workspaceId: decoded.workspace_id } }));
+          ws.send(
+            JSON.stringify({ type: 'connected', data: { userId: decoded.id, workspaceId: decoded.workspace_id } }),
+          );
           logger.info(`WebSocket client connected: user=${decoded.id}`);
         }
       } catch {
@@ -81,7 +83,7 @@ class WebSocketManager {
       try {
         const message: WSMessage = JSON.parse(data.toString());
         this.handleMessage(ws, message);
-      } catch (error) {
+      } catch (_error) {
         ws.send(JSON.stringify({ type: 'error', data: { message: 'Invalid message format' } }));
       }
     });
@@ -179,7 +181,9 @@ class WebSocketManager {
 
   getClientCount(): number {
     let count = 0;
-    this.clients.forEach((clients) => { count += clients.size; });
+    this.clients.forEach((clients) => {
+      count += clients.size;
+    });
     return count;
   }
 

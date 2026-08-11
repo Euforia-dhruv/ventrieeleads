@@ -1,4 +1,5 @@
-"""Audit task - performs website audits."""
+"""Audit task — performs website audits after scraping is complete."""
+import asyncio
 import logging
 import time
 from worker.celery_app import app
@@ -11,26 +12,35 @@ logger = logging.getLogger(__name__)
 
 
 @app.task(bind=True, name="worker.tasks.audit.audit_website")
-def audit_website(self, company_id: str):
-    """Perform an audit on a company website."""
+def audit_website(self, company_id_or_result, company_id: str = None):
+    """Perform an audit on a company website.
+
+    Accepts either:
+      - audit_website("company-id")  (direct call)
+      - audit_website(scrape_result, "company-id")  (from Celery chain)
+    """
+    # Handle Celery chain calling convention
+    if company_id is None:
+        company_id = str(company_id_or_result)
+
     logger.info(f"Auditing website for company: {company_id}")
+    t0 = time.time()
 
     with get_db_context() as db:
         company = db.query(Company).filter(Company.id == company_id).first()
         if not company:
             logger.warning(f"Company not found: {company_id}")
-            return
+            return {"status": "not_found", "company_id": company_id}
 
         website = db.query(Website).filter(Website.company_id == company_id).first()
         if not website:
-            if self.request.retries < 5:
-                logger.info(f"No website record yet for {company.name}, retrying in 10s (attempt {self.request.retries + 1}/5)")
-                raise self.retry(countdown=10, max_retries=5)
-            logger.warning(f"No website record for company after retries: {company_id}")
-            return
+            if self.request.retries < 3:
+                logger.info(f"No website record yet for {company.name}, retry {self.request.retries + 1}/3")
+                raise self.retry(countdown=15, max_retries=3)
+            logger.warning(f"No website record after retries: {company.name}")
+            return {"status": "no_website", "company_id": company_id}
 
         try:
-            import asyncio
             audit_data = asyncio.run(audit_service.perform_audit(website.url))
 
             audit = db.query(Audit).filter(Audit.website_id == website.id).first()
@@ -59,8 +69,14 @@ def audit_website(self, company_id: str):
 
             db.flush()
 
-            social_count = sum(1 for s in [website.instagram, website.facebook, website.linkedin, website.youtube] if s)
+            # Recalculate lead score with audit data
+            social_count = sum(1 for s in [website.instagram, website.facebook, website.linkedin, website.youtube, website.tiktok] if s)
             tech_count = db.query(Technology).filter(Technology.company_id == company_id).count()
+
+            # Get audit issues as strings for scoring
+            audit_issues = audit.issues or []
+            if audit_issues and isinstance(audit_issues[0], dict):
+                audit_issues = [i.get("title", str(i)) for i in audit_issues]
 
             score_result = lead_scorer.score(
                 website_score=audit.overall_score,
@@ -72,18 +88,34 @@ def audit_website(self, company_id: str):
                 has_whatsapp=bool(website.whatsapp),
                 tech_count=tech_count,
                 social_count=social_count,
-                industry=company.industry or ""
+                industry=company.industry or "",
+                audit_issues=audit_issues,
             )
 
-            from worker.models import Lead
-            lead = db.query(Lead).filter(Lead.company_id == company_id).first()
-            if lead:
-                lead.score = score_result["score"]
-                lead.score_label = score_result["label"]
+            from worker.models import Lead, Workspace
+            workspace = db.query(Workspace).first()
+            if workspace:
+                lead = db.query(Lead).filter(
+                    Lead.workspace_id == workspace.id,
+                    Lead.company_id == company_id
+                ).first()
+                if lead:
+                    lead.score = score_result["score"]
+                    lead.score_label = score_result["label"]
 
-            logger.info(f"Audit completed for {company.name}: overall={audit.overall_score}")
+            db.commit()
+
+            elapsed = round(time.time() - t0, 1)
+            logger.info(f"Audit completed for {company.name}: overall={audit.overall_score} ({elapsed}s)")
+
+            return {
+                "status": "completed",
+                "company_id": company_id,
+                "overall_score": audit.overall_score,
+                "lead_score": score_result["score"],
+            }
 
         except Exception as e:
             logger.error(f"Audit failed for {company.name}: {e}")
             db.rollback()
-            raise
+            return {"status": "failed", "company_id": company_id, "error": str(e)[:200]}

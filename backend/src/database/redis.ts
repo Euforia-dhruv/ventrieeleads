@@ -7,7 +7,7 @@ export class RedisClient {
 
   constructor() {
     this.client = createClient({
-      url: process.env.REDIS_URL || 'redis://localhost:6379'
+      url: process.env.REDIS_URL || 'redis://localhost:6379',
     }) as RedisClientType;
 
     if (process.env.REDIS_PASSWORD) {
@@ -41,7 +41,7 @@ export class RedisClient {
   createSubscriber(): RedisClientType {
     if (!this.subscriber) {
       this.subscriber = createClient({
-        url: process.env.REDIS_URL || 'redis://localhost:6379'
+        url: process.env.REDIS_URL || 'redis://localhost:6379',
       }) as RedisClientType;
       if (process.env.REDIS_PASSWORD) {
         (this.subscriber as any).options.password = process.env.REDIS_PASSWORD;

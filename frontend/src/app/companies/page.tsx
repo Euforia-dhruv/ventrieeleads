@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Search, Building2, Globe, MapPin, Star, Phone, Mail, ExternalLink, ArrowUpRight, Loader2 } from 'lucide-react';
+import Image from 'next/image';
+import { Search, Building2, Globe, MapPin, Phone, Mail, Loader2 } from 'lucide-react';
 import { cn, getScoreColor } from '@/lib/utils';
 
 interface Company {
@@ -27,28 +28,27 @@ export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-
-  useEffect(() => {
-    fetchCompanies();
-  }, []);
-
-  const fetchCompanies = async () => {
+  async function fetchCompanies() {
     setLoading(true);
     try {
       const res = await fetch('/api/leads?limit=100&sortBy=created_at&sortOrder=DESC');
       const data = await res.json();
       setCompanies(data.data || []);
-    } catch {} finally {
+    } catch {
+    } finally {
       setLoading(false);
     }
-  };
+  }
+  useEffect(() => {
+    fetchCompanies();
+  }, []);
 
-  const filtered = companies.filter(c => {
+  const filtered = companies.filter((c) => {
     if (!search) return true;
     const q = search.toLowerCase();
-    return c.name?.toLowerCase().includes(q) ||
-           c.industry?.toLowerCase().includes(q) ||
-           c.city?.toLowerCase().includes(q);
+    return (
+      c.name?.toLowerCase().includes(q) || c.industry?.toLowerCase().includes(q) || c.city?.toLowerCase().includes(q)
+    );
   });
 
   return (
@@ -97,31 +97,50 @@ export default function CompaniesPage() {
               <div className="flex items-start gap-3">
                 <div className="w-11 h-11 rounded-xl bg-white/[0.04] flex items-center justify-center shrink-0 overflow-hidden">
                   {company.logo_url ? (
-                    <img src={company.logo_url} alt="" className="w-full h-full object-cover" />
+                    <Image
+                      src={company.logo_url}
+                      alt=""
+                      width={44}
+                      height={44}
+                      unoptimized
+                      className="w-full h-full object-cover"
+                    />
                   ) : (
                     <span className="text-[16px] font-bold text-white/20">{company.name.charAt(0)}</span>
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <h3 className="text-[14px] font-semibold text-white truncate group-hover:text-blue-400 transition-colors">{company.name}</h3>
+                    <h3 className="text-[14px] font-semibold text-white truncate group-hover:text-blue-400 transition-colors">
+                      {company.name}
+                    </h3>
                     {company.lead_score !== undefined && (
-                      <span className={cn(
-                        "px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0",
-                        company.lead_score >= 70 ? "bg-green-500/15 text-green-400" :
-                        company.lead_score >= 40 ? "bg-yellow-500/15 text-yellow-400" :
-                        "bg-red-500/15 text-red-400"
-                      )}>
+                      <span
+                        className={cn(
+                          'px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0',
+                          company.lead_score >= 70
+                            ? 'bg-green-500/15 text-green-400'
+                            : company.lead_score >= 40
+                              ? 'bg-yellow-500/15 text-yellow-400'
+                              : 'bg-red-500/15 text-red-400',
+                        )}
+                      >
                         {company.lead_score >= 70 ? 'Hot' : company.lead_score >= 40 ? 'Warm' : 'Cold'}
                       </span>
                     )}
                   </div>
                   <div className="flex items-center gap-2 text-[11px] text-[hsl(215,16%,45%)]">
                     {company.industry && (
-                      <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{company.industry}</span>
+                      <span className="flex items-center gap-1">
+                        <Building2 className="w-3 h-3" />
+                        {company.industry}
+                      </span>
                     )}
                     {(company.city || company.country) && (
-                      <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{[company.city, company.country].filter(Boolean).join(', ')}</span>
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        {[company.city, company.country].filter(Boolean).join(', ')}
+                      </span>
                     )}
                   </div>
                 </div>
@@ -133,18 +152,42 @@ export default function CompaniesPage() {
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] text-[hsl(215,16%,40%)]">Lead</span>
                     <div className="w-14 h-1 bg-white/[0.06] rounded-full overflow-hidden">
-                      <div className={cn("h-full rounded-full", company.lead_score >= 70 ? 'bg-green-500' : company.lead_score >= 40 ? 'bg-yellow-500' : 'bg-red-500')} style={{ width: `${company.lead_score}%` }} />
+                      <div
+                        className={cn(
+                          'h-full rounded-full',
+                          company.lead_score >= 70
+                            ? 'bg-green-500'
+                            : company.lead_score >= 40
+                              ? 'bg-yellow-500'
+                              : 'bg-red-500',
+                        )}
+                        style={{ width: `${company.lead_score}%` }}
+                      />
                     </div>
-                    <span className={cn("text-[10px] font-medium", getScoreColor(company.lead_score))}>{company.lead_score}</span>
+                    <span className={cn('text-[10px] font-medium', getScoreColor(company.lead_score))}>
+                      {company.lead_score}
+                    </span>
                   </div>
                 )}
                 {company.website_score !== undefined && (
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] text-[hsl(215,16%,40%)]">Web</span>
                     <div className="w-14 h-1 bg-white/[0.06] rounded-full overflow-hidden">
-                      <div className={cn("h-full rounded-full", company.website_score >= 70 ? 'bg-green-500' : company.website_score >= 40 ? 'bg-yellow-500' : 'bg-red-500')} style={{ width: `${company.website_score}%` }} />
+                      <div
+                        className={cn(
+                          'h-full rounded-full',
+                          company.website_score >= 70
+                            ? 'bg-green-500'
+                            : company.website_score >= 40
+                              ? 'bg-yellow-500'
+                              : 'bg-red-500',
+                        )}
+                        style={{ width: `${company.website_score}%` }}
+                      />
                     </div>
-                    <span className={cn("text-[10px] font-medium", getScoreColor(company.website_score))}>{company.website_score}</span>
+                    <span className={cn('text-[10px] font-medium', getScoreColor(company.website_score))}>
+                      {company.website_score}
+                    </span>
                   </div>
                 )}
               </div>
@@ -152,21 +195,35 @@ export default function CompaniesPage() {
               {/* Contact */}
               <div className="flex items-center gap-2 mt-2">
                 {company.website && (
-                  <a href={company.website} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
-                    className="flex items-center gap-1 px-2 py-1 bg-blue-500/10 rounded-md text-[10px] text-blue-400 hover:bg-blue-500/20 transition-colors">
-                    <Globe className="w-3 h-3" />Website
+                  <a
+                    href={company.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1 px-2 py-1 bg-blue-500/10 rounded-md text-[10px] text-blue-400 hover:bg-blue-500/20 transition-colors"
+                  >
+                    <Globe className="w-3 h-3" />
+                    Website
                   </a>
                 )}
                 {company.email && (
-                  <a href={`mailto:${company.email}`} onClick={(e) => e.stopPropagation()}
-                    className="flex items-center gap-1 px-2 py-1 bg-white/[0.04] rounded-md text-[10px] text-[hsl(215,20%,60%)] hover:bg-white/[0.08] transition-colors">
-                    <Mail className="w-3 h-3" />Email
+                  <a
+                    href={`mailto:${company.email}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1 px-2 py-1 bg-white/[0.04] rounded-md text-[10px] text-[hsl(215,20%,60%)] hover:bg-white/[0.08] transition-colors"
+                  >
+                    <Mail className="w-3 h-3" />
+                    Email
                   </a>
                 )}
                 {company.phone && (
-                  <a href={`tel:${company.phone}`} onClick={(e) => e.stopPropagation()}
-                    className="flex items-center gap-1 px-2 py-1 bg-white/[0.04] rounded-md text-[10px] text-[hsl(215,20%,60%)] hover:bg-white/[0.08] transition-colors">
-                    <Phone className="w-3 h-3" />Call
+                  <a
+                    href={`tel:${company.phone}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1 px-2 py-1 bg-white/[0.04] rounded-md text-[10px] text-[hsl(215,20%,60%)] hover:bg-white/[0.08] transition-colors"
+                  >
+                    <Phone className="w-3 h-3" />
+                    Call
                   </a>
                 )}
               </div>

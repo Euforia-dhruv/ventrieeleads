@@ -21,16 +21,13 @@ export async function listDiscoveryCampaigns(req: Request, res: Response): Promi
       params.push(status);
     }
 
-    const countResult = await pool.query(
-      `SELECT COUNT(*) FROM discovery_campaigns ${where}`,
-      params
-    );
+    const countResult = await pool.query(`SELECT COUNT(*) FROM discovery_campaigns ${where}`, params);
     const total = parseInt(countResult.rows[0].count);
 
     params.push(limit, offset);
     const result = await pool.query(
       `SELECT * FROM discovery_campaigns ${where} ORDER BY created_at DESC LIMIT $${idx++} OFFSET $${idx++}`,
-      params
+      params,
     );
 
     res.json({
@@ -47,10 +44,9 @@ export async function listDiscoveryCampaigns(req: Request, res: Response): Promi
 export async function getDiscoveryCampaign(req: Request, res: Response): Promise<void> {
   try {
     const pool = getPool();
-    const result = await pool.query(
-      'SELECT * FROM discovery_campaigns WHERE id = $1 AND is_deleted = FALSE',
-      [req.params.id]
-    );
+    const result = await pool.query('SELECT * FROM discovery_campaigns WHERE id = $1 AND is_deleted = FALSE', [
+      req.params.id,
+    ]);
     if (result.rows.length === 0) {
       res.status(404).json({ success: false, message: 'Campaign not found' });
       return;
@@ -66,12 +62,19 @@ export async function createDiscoveryCampaign(req: Request, res: Response): Prom
   try {
     const pool = getPool();
     const {
-      name, description = '',
-      country_ids = [], state_ids = [], city_ids = [],
-      industry_ids = [], provider_slugs = [],
-      priority = 5, max_businesses_per_city = 50,
-      max_total_businesses = 10000, concurrency = 5,
-      schedule_type = 'once', cron_expression = null,
+      name,
+      description = '',
+      country_ids = [],
+      state_ids = [],
+      city_ids = [],
+      industry_ids = [],
+      provider_slugs = [],
+      priority = 5,
+      max_businesses_per_city = 50,
+      max_total_businesses = 10000,
+      concurrency = 5,
+      schedule_type = 'once',
+      cron_expression = null,
     } = req.body;
 
     if (!name) {
@@ -80,7 +83,8 @@ export async function createDiscoveryCampaign(req: Request, res: Response): Prom
     }
 
     const id = uuidv4();
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       INSERT INTO discovery_campaigns (
         id, name, description, status,
         country_ids, state_ids, city_ids, industry_ids, provider_slugs,
@@ -88,14 +92,24 @@ export async function createDiscoveryCampaign(req: Request, res: Response): Prom
         schedule_type, cron_expression
       ) VALUES ($1,$2,$3,'draft',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
       RETURNING *
-    `, [
-      id, name, description,
-      JSON.stringify(country_ids), JSON.stringify(state_ids),
-      JSON.stringify(city_ids), JSON.stringify(industry_ids),
-      JSON.stringify(provider_slugs),
-      priority, max_businesses_per_city, max_total_businesses, concurrency,
-      schedule_type, cron_expression,
-    ]);
+    `,
+      [
+        id,
+        name,
+        description,
+        JSON.stringify(country_ids),
+        JSON.stringify(state_ids),
+        JSON.stringify(city_ids),
+        JSON.stringify(industry_ids),
+        JSON.stringify(provider_slugs),
+        priority,
+        max_businesses_per_city,
+        max_total_businesses,
+        concurrency,
+        schedule_type,
+        cron_expression,
+      ],
+    );
 
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error) {
@@ -109,9 +123,19 @@ export async function updateDiscoveryCampaign(req: Request, res: Response): Prom
     const pool = getPool();
     const { id } = req.params;
     const fields = [
-      'name', 'description', 'country_ids', 'state_ids', 'city_ids',
-      'industry_ids', 'provider_slugs', 'priority', 'max_businesses_per_city',
-      'max_total_businesses', 'concurrency', 'schedule_type', 'cron_expression',
+      'name',
+      'description',
+      'country_ids',
+      'state_ids',
+      'city_ids',
+      'industry_ids',
+      'provider_slugs',
+      'priority',
+      'max_businesses_per_city',
+      'max_total_businesses',
+      'concurrency',
+      'schedule_type',
+      'cron_expression',
     ];
 
     const updates: string[] = [];
@@ -136,7 +160,7 @@ export async function updateDiscoveryCampaign(req: Request, res: Response): Prom
 
     const result = await pool.query(
       `UPDATE discovery_campaigns SET ${updates.join(', ')} WHERE id = $${idx} AND is_deleted = FALSE RETURNING *`,
-      values
+      values,
     );
 
     if (result.rows.length === 0) {
@@ -156,7 +180,7 @@ export async function deleteDiscoveryCampaign(req: Request, res: Response): Prom
     const result = await pool.query(
       `UPDATE discovery_campaigns SET is_deleted = TRUE, updated_at = NOW()
        WHERE id = $1 AND is_deleted = FALSE RETURNING id`,
-      [req.params.id]
+      [req.params.id],
     );
     if (result.rows.length === 0) {
       res.status(404).json({ success: false, message: 'Campaign not found' });
@@ -174,10 +198,7 @@ export async function activateDiscoveryCampaign(req: Request, res: Response): Pr
     const pool = getPool();
     const { id } = req.params;
 
-    const result = await pool.query(
-      `SELECT * FROM discovery_campaigns WHERE id = $1 AND is_deleted = FALSE`,
-      [id]
-    );
+    const result = await pool.query(`SELECT * FROM discovery_campaigns WHERE id = $1 AND is_deleted = FALSE`, [id]);
     if (result.rows.length === 0) {
       res.status(404).json({ success: false, message: 'Campaign not found' });
       return;
@@ -209,7 +230,7 @@ export async function pauseDiscoveryCampaign(req: Request, res: Response): Promi
     const result = await pool.query(
       `UPDATE discovery_campaigns SET status = 'paused', updated_at = NOW()
        WHERE id = $1 AND status = 'active' AND is_deleted = FALSE RETURNING *`,
-      [req.params.id]
+      [req.params.id],
     );
     if (result.rows.length === 0) {
       res.status(404).json({ success: false, message: 'Campaign not found or not active' });
@@ -240,10 +261,7 @@ export async function getCampaignJobs(req: Request, res: Response): Promise<void
       params.push(status);
     }
 
-    const countResult = await pool.query(
-      `SELECT COUNT(*) FROM campaign_jobs cj ${where}`,
-      params
-    );
+    const countResult = await pool.query(`SELECT COUNT(*) FROM campaign_jobs cj ${where}`, params);
     const total = parseInt(countResult.rows[0].count);
 
     params.push(limit, offset);
@@ -255,7 +273,7 @@ export async function getCampaignJobs(req: Request, res: Response): Promise<void
        ${where}
        ORDER BY cj.created_at DESC
        LIMIT $${idx++} OFFSET $${idx++}`,
-      params
+      params,
     );
 
     res.json({
@@ -293,25 +311,26 @@ export async function getCoverageStats(req: Request, res: Response): Promise<voi
   try {
     const pool = getPool();
 
-    const [totalCountries, totalStates, totalCities, totalIndustries, totalCompanies] =
-      await Promise.all([
-        pool.query(`SELECT COUNT(*) FROM locations WHERE location_type='country' AND is_deleted=FALSE AND is_active=TRUE`),
-        pool.query(`SELECT COUNT(*) FROM locations WHERE location_type='state' AND is_deleted=FALSE AND is_active=TRUE`),
-        pool.query(`SELECT COUNT(*) FROM locations WHERE location_type='city' AND is_deleted=FALSE AND is_active=TRUE`),
-        pool.query(`SELECT COUNT(*) FROM industries WHERE is_deleted=FALSE AND is_active=TRUE`),
-        pool.query(`SELECT COUNT(*) FROM companies WHERE is_deleted=FALSE`),
-      ]);
+    const [totalCountries, totalStates, totalCities, totalIndustries, totalCompanies] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*) FROM locations WHERE location_type='country' AND is_deleted=FALSE AND is_active=TRUE`,
+      ),
+      pool.query(`SELECT COUNT(*) FROM locations WHERE location_type='state' AND is_deleted=FALSE AND is_active=TRUE`),
+      pool.query(`SELECT COUNT(*) FROM locations WHERE location_type='city' AND is_deleted=FALSE AND is_active=TRUE`),
+      pool.query(`SELECT COUNT(*) FROM industries WHERE is_deleted=FALSE AND is_active=TRUE`),
+      pool.query(`SELECT COUNT(*) FROM companies WHERE is_deleted=FALSE`),
+    ]);
 
     const coveredLocations = await pool.query(
-      `SELECT COUNT(DISTINCT location_id) FROM campaign_jobs WHERE status='completed' AND is_deleted=FALSE AND location_id IS NOT NULL`
+      `SELECT COUNT(DISTINCT location_id) FROM campaign_jobs WHERE status='completed' AND is_deleted=FALSE AND location_id IS NOT NULL`,
     );
     const coveredIndustries = await pool.query(
-      `SELECT COUNT(DISTINCT industry_id) FROM campaign_jobs WHERE status='completed' AND is_deleted=FALSE AND industry_id IS NOT NULL`
+      `SELECT COUNT(DISTINCT industry_id) FROM campaign_jobs WHERE status='completed' AND is_deleted=FALSE AND industry_id IS NOT NULL`,
     );
     const countriesWithCoverage = await pool.query(
       `SELECT COUNT(DISTINCT l.id) FROM locations l
        JOIN campaign_jobs cj ON cj.location_id = l.id
-       WHERE l.location_type='country' AND cj.status='completed' AND cj.is_deleted=FALSE`
+       WHERE l.location_type='country' AND cj.status='completed' AND cj.is_deleted=FALSE`,
     );
 
     const tc = parseInt(totalCountries.rows[0].count);
@@ -333,9 +352,9 @@ export async function getCoverageStats(req: Request, res: Response): Promise<voi
         covered_locations: cl,
         covered_industries: ci,
         countries_with_coverage: cc,
-        location_coverage_pct: Math.round(cl / Math.max(tci, 1) * 100 * 10) / 10,
-        industry_coverage_pct: Math.round(ci / Math.max(ti, 1) * 100 * 10) / 10,
-        country_coverage_pct: Math.round(cc / Math.max(tc, 1) * 100 * 10) / 10,
+        location_coverage_pct: Math.round((cl / Math.max(tci, 1)) * 100 * 10) / 10,
+        industry_coverage_pct: Math.round((ci / Math.max(ti, 1)) * 100 * 10) / 10,
+        country_coverage_pct: Math.round((cc / Math.max(tc, 1)) * 100 * 10) / 10,
       },
     });
   } catch (error) {
@@ -370,7 +389,8 @@ export async function getCountryCoverage(req: Request, res: Response): Promise<v
       total_jobs: parseInt(r.total_jobs),
       total_companies: parseInt(r.total_companies),
       businesses_discovered: parseInt(r.businesses_discovered),
-      coverage_pct: Math.round(parseInt(r.completed_jobs) / Math.max(parseInt(r.total_cities) * 5, 1) * 100 * 10) / 10,
+      coverage_pct:
+        Math.round((parseInt(r.completed_jobs) / Math.max(parseInt(r.total_cities) * 5, 1)) * 100 * 10) / 10,
     }));
 
     res.json({ success: true, data });
@@ -394,11 +414,14 @@ export async function getIndustryCoverage(req: Request, res: Response): Promise<
       WHERE i.is_deleted = FALSE AND i.is_active = TRUE AND i.parent_id IS NOT NULL
       ORDER BY total_companies DESC
     `);
-    res.json({ success: true, data: result.rows.map((r: any) => ({
-      ...r,
-      completed_jobs: parseInt(r.completed_jobs),
-      total_companies: parseInt(r.total_companies),
-    }))});
+    res.json({
+      success: true,
+      data: result.rows.map((r: any) => ({
+        ...r,
+        completed_jobs: parseInt(r.completed_jobs),
+        total_companies: parseInt(r.total_companies),
+      })),
+    });
   } catch (error) {
     logger.error('Error getting industry coverage:', error);
     res.status(500).json({ success: false, message: 'Failed to get industry coverage' });
@@ -505,7 +528,7 @@ export async function getProviderHealth(req: Request, res: Response): Promise<vo
 
     const data = Object.values(aggregated).map((a: any) => ({
       ...a,
-      success_rate: a.total_requests > 0 ? Math.round(a.successful_requests / a.total_requests * 1000) / 1000 : 0,
+      success_rate: a.total_requests > 0 ? Math.round((a.successful_requests / a.total_requests) * 1000) / 1000 : 0,
       avg_latency_ms: a.total_requests > 0 ? Math.round(a.avg_latency_ms / a.total_requests) : 0,
     }));
 

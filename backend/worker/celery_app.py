@@ -1,8 +1,11 @@
 """Celery application configuration."""
 import os
+import logging
 from celery import Celery
 from celery.schedules import crontab
 from celery.signals import worker_ready
+
+logger = logging.getLogger(__name__)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 CELERY_TIMEZONE = os.getenv("TIMEZONE", "UTC")
@@ -23,6 +26,7 @@ app = Celery(
         "worker.tasks.campaign_orchestrator",
         "worker.tasks.intelligence_analytics",
         "worker.tasks.modules",
+        "worker.tasks.notifications",
     ]
 )
 
@@ -132,6 +136,14 @@ app.conf.update(
             "task": "worker.tasks.provider_health.cleanup_old_metrics",
             "schedule": crontab(hour=4, minute=0),
         },
+        "notifications-dispatch-emails": {
+            "task": "worker.tasks.notifications.dispatch_pending_emails",
+            "schedule": 60.0,
+        },
+        "notifications-dispatch-browser": {
+            "task": "worker.tasks.notifications.dispatch_pending_browser",
+            "schedule": 60.0,
+        },
     }
 )
 
@@ -141,3 +153,29 @@ def initialize_database(sender, **kwargs):
     """Initialize database tables when worker starts."""
     from worker.models.database import init_db
     init_db()
+    seed_agent_states()
+
+
+def seed_agent_states():
+    """Create initial agent_states rows for all registered agents so the
+    agent API surfaces them even before their first scheduled run."""
+    try:
+        from worker.models.database import get_db_context
+        from worker.models import AgentState
+        from worker.agents import AGENTS
+
+        with get_db_context() as db:
+            for name, agent in AGENTS.items():
+                existing = db.query(AgentState).filter(AgentState.agent_name == name).first()
+                if not existing:
+                    db.add(AgentState(
+                        agent_name=name,
+                        status="idle",
+                        goals=agent.get_goals(),
+                        confidence=0.0,
+                        reasoning="",
+                    ))
+            db.commit()
+            logger.info(f"Seeded agent states for {len(AGENTS)} agents")
+    except Exception as e:
+        logger.warning(f"Could not seed agent states: {e}")

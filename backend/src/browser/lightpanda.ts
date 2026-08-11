@@ -24,7 +24,7 @@ const DEFAULT_CONFIG: LightpandaConfig = {
   height: 1080,
   deviceScaleFactor: 1,
   userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  timeout: 30000
+  timeout: 30000,
 };
 
 class LightpandaBrowser {
@@ -43,10 +43,11 @@ class LightpandaBrowser {
       const config = { ...this.config, ...options };
       logger.info('Lightpanda browser launching', { headless: config.headless });
 
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { chromium } = require('playwright');
       const browser = await chromium.launch({
         headless: config.headless,
-        executablePath: this.executablePath
+        executablePath: this.executablePath,
       });
 
       const context = await browser.newContext({
@@ -54,7 +55,7 @@ class LightpandaBrowser {
         deviceScaleFactor: config.deviceScaleFactor,
         userAgent: config.userAgent,
         locale: 'en-US',
-        timezoneId: process.env.TIMEZONE || 'UTC'
+        timezoneId: process.env.TIMEZONE || 'UTC',
       });
 
       const page = await context.newPage();
@@ -66,7 +67,7 @@ class LightpandaBrowser {
         browser,
         context,
         createdAt: new Date(),
-        lastUsed: new Date()
+        lastUsed: new Date(),
       });
 
       logger.info(`Lightpanda session created: ${sessionId}`);
@@ -96,7 +97,7 @@ class LightpandaBrowser {
     try {
       await session.page.goto(url, {
         waitUntil: 'networkidle',
-        timeout: this.config.timeout
+        timeout: this.config.timeout,
       });
       logger.info(`Navigated to ${url} in session ${sessionId}`);
       return { success: true, url, title: await session.page.title() };
@@ -114,7 +115,7 @@ class LightpandaBrowser {
 
     const buffer = await session.page.screenshot({
       fullPage,
-      type: 'png'
+      type: 'png',
     });
 
     logger.info(`Screenshot taken for session ${sessionId}`);

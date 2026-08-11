@@ -1,5 +1,7 @@
 """Lead scoring algorithm with AI enhancement."""
+import asyncio
 import logging
+import json
 from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -117,6 +119,116 @@ class LeadScoringService:
             "reputation": round(reputation),
             "opportunity_score": round(opportunity_score),
         }
+
+    async def ai_score(
+        self,
+        company_name: str = "",
+        industry: str = "",
+        website: str = "",
+        website_score: int = 0,
+        review_count: int = 0,
+        rating: float = 0,
+        has_website: bool = True,
+        has_email: bool = False,
+        has_phone: bool = False,
+        has_whatsapp: bool = False,
+        tech_count: int = 0,
+        social_count: int = 0,
+        audit_issues: list = None,
+        audit_strengths: list = None,
+        audit_weaknesses: list = None,
+        tech_names: list = None,
+        city: str = "",
+        country: str = "",
+    ) -> Dict:
+        """AI-enhanced scoring. Falls back to heuristic if AI unavailable."""
+        try:
+            from worker.services.ai_client import ai_client
+
+            issues_text = ", ".join((audit_issues or [])[:5]) or "none identified"
+            strengths_text = ", ".join((audit_strengths or [])[:3]) or "none identified"
+            weaknesses_text = ", ".join((audit_weaknesses or [])[:5]) or "none identified"
+            techs_text = ", ".join((tech_names or [])[:10]) or "none detected"
+
+            prompt = f"""Analyze this business for a web development agency lead score.
+
+Company: {company_name}
+Industry: {industry}
+Location: {city}, {country}
+Website: {website}
+Google Rating: {rating}/5 ({review_count} reviews)
+Has Website: {has_website}
+Has Email: {has_email}
+Has Phone: {has_phone}
+Has WhatsApp: {has_whatsapp}
+Website Score: {website_score}/100
+Technologies: {techs_text}
+Social Links: {social_count} detected
+
+Audit Issues: {issues_text}
+Audit Strengths: {strengths_text}
+Audit Weaknesses: {weaknesses_text}
+
+Return as JSON:
+{{
+  "lead_score": 0-100,
+  "opportunity_score": 0-100,
+  "website_score": 0-100,
+  "urgency": "high|medium|low",
+  "buying_probability": 0-100,
+  "estimated_project_value": "$X,XXX - $XX,XXX",
+  "recommended_service": "specific service name",
+  "pain_points": ["list of specific problems"],
+  "reasons": ["list of reasons to contact"],
+  "outreach_angle": "one sentence pitch angle"
+}}"""
+
+            result = await ai_client.generate_json(prompt)
+            if result and isinstance(result, dict) and "lead_score" in result:
+                return {
+                    "score": max(0, min(100, int(result.get("lead_score", 50)))),
+                    "label": self._score_label(int(result.get("lead_score", 50))),
+                    "opportunity_score": max(0, min(100, int(result.get("opportunity_score", 50)))),
+                    "website_quality": max(0, min(100, int(result.get("website_score", website_score)))),
+                    "urgency": result.get("urgency", "medium"),
+                    "buying_probability": max(0, min(100, int(result.get("buying_probability", 50)))),
+                    "estimated_project_value": result.get("estimated_project_value", ""),
+                    "recommended_service": result.get("recommended_service", ""),
+                    "pain_points": result.get("pain_points", []),
+                    "reasons": result.get("reasons", []),
+                    "outreach_angle": result.get("outreach_angle", ""),
+                    "ai_enhanced": True,
+                }
+
+        except Exception as e:
+            logger.warning(f"AI scoring failed, falling back to heuristic: {e}")
+
+        # Fallback to heuristic
+        result = self.score(
+            website_score=website_score,
+            review_count=review_count,
+            rating=rating,
+            has_website=has_website,
+            has_email=has_email,
+            has_phone=has_phone,
+            has_whatsapp=has_whatsapp,
+            tech_count=tech_count,
+            social_count=social_count,
+            industry=industry,
+            audit_issues=audit_issues,
+        )
+        result["ai_enhanced"] = False
+        result["pain_points"] = audit_weaknesses or []
+        result["reasons"] = audit_strengths or []
+        result["outreach_angle"] = f"Improve {company_name}'s digital presence"
+        return result
+
+    def _score_label(self, score: int) -> str:
+        if score >= 70:
+            return "hot"
+        elif score >= 40:
+            return "warm"
+        return "cold"
 
     def _calculate_opportunity_score(
         self,

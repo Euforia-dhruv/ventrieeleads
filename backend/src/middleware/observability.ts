@@ -27,7 +27,7 @@ class MetricStore {
         values: new Map(),
         buckets,
         sum: 0,
-        count: 0
+        count: 0,
       });
     }
     return this.metrics.get(name)!;
@@ -80,8 +80,8 @@ class MetricStore {
       if (metric.type === 'histogram') {
         let cumulative = 0;
         const sortedKeys = [...metric.values.keys()].sort();
-        const bucketKeys = sortedKeys.filter(k => k.includes('le='));
-        const otherKeys = sortedKeys.filter(k => !k.includes('le='));
+        const bucketKeys = sortedKeys.filter((k) => k.includes('le='));
+        const otherKeys = sortedKeys.filter((k) => !k.includes('le='));
 
         for (const key of otherKeys) {
           lines.push(`${metric.name}{${key}} ${metric.values.get(key)}`);
@@ -90,7 +90,10 @@ class MetricStore {
         for (const key of bucketKeys) {
           const val = metric.values.get(key) || 0;
           cumulative += val;
-          const labelStr = key.replace(/le="[^"]*"/, '').replace(/,$/, '').replace(/^$/, '');
+          const labelStr = key
+            .replace(/le="[^"]*"/, '')
+            .replace(/,$/, '')
+            .replace(/^$/, '');
           const suffix = labelStr ? `,${labelStr}` : '';
           lines.push(`${metric.name}_bucket{le=${key.split('le=')[1].replace(/"/g, '')}${suffix}} ${cumulative}`);
         }
@@ -114,7 +117,7 @@ class MetricStore {
         type: metric.type,
         values: Object.fromEntries(metric.values),
         sum: metric.sum,
-        count: metric.count
+        count: metric.count,
       };
     }
     return snapshot;
@@ -150,7 +153,7 @@ export function createSpan(operationName: string, parentSpanId?: string): SpanCo
     startTime: Date.now(),
     attributes: {},
     events: [],
-    status: 'unset'
+    status: 'unset',
   };
   activeSpans.set(span.spanId, span);
   return span;
@@ -166,7 +169,7 @@ export function finishSpan(span: SpanContext, error?: Error): void {
     span.attributes['error.name'] = error.name;
     addSpanEvent(span, 'exception', {
       'exception.type': error.name,
-      'exception.message': error.message
+      'exception.message': error.message,
     });
   } else {
     span.status = 'ok';
@@ -182,7 +185,7 @@ export function finishSpan(span: SpanContext, error?: Error): void {
     duration: `${span.attributes['duration_ms']}ms`,
     status: span.status,
     attributes: span.attributes,
-    events: span.events
+    events: span.events,
   });
 }
 
@@ -208,7 +211,7 @@ async function withSpanAsync<T>(operationName: string, fn: (span: SpanContext) =
 
 // ── Request Tracing Middleware ───────────────────────────────
 export function tracingMiddleware(req: Request, res: Response, next: NextFunction): void {
-  const traceId = req.headers['x-trace-id'] as string || generateId();
+  const traceId = (req.headers['x-trace-id'] as string) || generateId();
   const spanId = generateId();
   const parentSpanId = req.headers['x-parent-span-id'] as string;
 
@@ -224,10 +227,10 @@ export function tracingMiddleware(req: Request, res: Response, next: NextFunctio
       'http.user_agent': req.get('User-Agent') || '',
       'http.remote_addr': req.ip || '',
       'http.scheme': req.protocol,
-      'http.host': req.get('Host') || ''
+      'http.host': req.get('Host') || '',
     },
     events: [],
-    status: 'unset'
+    status: 'unset',
   };
 
   activeSpans.set(spanId, span);
@@ -265,8 +268,8 @@ export function tracingMiddleware(req: Request, res: Response, next: NextFunctio
       span: {
         operation: span.operationName,
         status: span.status,
-        attributes: span.attributes
-      }
+        attributes: span.attributes,
+      },
     });
 
     return originalEnd.apply(res, args as any);
@@ -277,7 +280,7 @@ export function tracingMiddleware(req: Request, res: Response, next: NextFunctio
 
 // ── Structured Logging Middleware ────────────────────────────
 export function structuredLoggingMiddleware(req: Request, res: Response, next: NextFunction): void {
-  const requestId = req.headers['x-request-id'] as string || generateId();
+  const requestId = (req.headers['x-request-id'] as string) || generateId();
   const startTime = Date.now();
 
   req.headers['x-request-id'] = requestId;
@@ -300,7 +303,7 @@ export function structuredLoggingMiddleware(req: Request, res: Response, next: N
       userId: (req as any).user?.id,
       workspaceId: (req as any).workspaceId,
       traceId: (req as any).traceId,
-      spanId: (req as any).spanId
+      spanId: (req as any).spanId,
     };
 
     if (duration > 5000) {
@@ -333,7 +336,7 @@ export function structuredLoggingMiddleware(req: Request, res: Response, next: N
         contentLength: typeof body === 'string' ? body.length : 0,
         userId: (req as any).user?.id,
         workspaceId: (req as any).workspaceId,
-        traceId: (req as any).traceId
+        traceId: (req as any).traceId,
       };
 
       if (res.statusCode >= 500) {
@@ -358,12 +361,21 @@ export function requestMetricsMiddleware(req: Request, res: Response, next: Next
   res.on('finish', () => {
     const duration = Date.now() - startTime;
     const status = res.statusCode.toString();
-    const statusClass = status.startsWith('2') ? '2xx' : status.startsWith('3') ? '3xx' : status.startsWith('4') ? '4xx' : '5xx';
+    const statusClass = status.startsWith('2')
+      ? '2xx'
+      : status.startsWith('3')
+        ? '3xx'
+        : status.startsWith('4')
+          ? '4xx'
+          : '5xx';
 
     store.incCounter('http_requests_total', { method, route, status: statusClass });
     store.observeHistogram('http_request_duration_ms', duration, { method, route, status: statusClass });
     store.setGauge('http_request_size_bytes', parseInt(req.get('Content-Length') || '0'), { method, route });
-    store.setGauge('http_response_size_bytes', parseInt(res.getHeader('Content-Length') as string || '0'), { method, route });
+    store.setGauge('http_response_size_bytes', parseInt((res.getHeader('Content-Length') as string) || '0'), {
+      method,
+      route,
+    });
 
     if (res.statusCode >= 400) {
       store.incCounter('http_errors_total', { method, route, status: statusClass });
@@ -461,7 +473,7 @@ export class DatabaseMetricsCollector {
     return {
       queryCount: this.queryCount,
       slowQueryCount: this.slowQueryCount,
-      errorCount: this.errorCount
+      errorCount: this.errorCount,
     };
   }
 }
@@ -472,7 +484,8 @@ export function instrumentedQuery(pool: any, query: string, params?: any[]): Pro
   const tableMatch = query.match(/(?:FROM|INTO|UPDATE|JOIN)\s+(\w+)/i);
   const table = tableMatch ? tableMatch[1] : 'unknown';
 
-  return pool.query(query, params)
+  return pool
+    .query(query, params)
     .then((result: any) => {
       const duration = Date.now() - startTime;
       DatabaseMetricsCollector.recordQuery(duration, operation, table, true);
@@ -487,7 +500,14 @@ export function instrumentedQuery(pool: any, query: string, params?: any[]): Pro
 
 // ── AI Usage Metrics ────────────────────────────────────────
 export class AIMetricsCollector {
-  static recordRequest(provider: string, model: string, tokensIn: number, tokensOut: number, duration: number, success: boolean): void {
+  static recordRequest(
+    provider: string,
+    model: string,
+    tokensIn: number,
+    tokensOut: number,
+    duration: number,
+    success: boolean,
+  ): void {
     store.incCounter('ai_requests_total', { provider, model, success: success ? 'true' : 'false' });
     store.observeHistogram('ai_request_duration_ms', duration, { provider, model });
     store.incCounter('ai_tokens_input_total', { provider, model }, tokensIn);
@@ -500,7 +520,15 @@ export class AIMetricsCollector {
       store.incCounter('ai_errors_total', { provider, model });
     }
 
-    logger.info('AI request metrics', { provider, model, tokensIn, tokensOut, duration: `${duration}ms`, success, estimatedCost: cost });
+    logger.info('AI request metrics', {
+      provider,
+      model,
+      tokensIn,
+      tokensOut,
+      duration: `${duration}ms`,
+      success,
+      estimatedCost: cost,
+    });
   }
 
   static estimateCost(provider: string, model: string, inputTokens: number, outputTokens: number): number {
@@ -512,7 +540,7 @@ export class AIMetricsCollector {
       'openai:gpt-4o-mini': { input: 0.00015 / 1000, output: 0.0006 / 1000 },
       'gemini:gemini-pro': { input: 0.00025 / 1000, output: 0.0005 / 1000 },
       'gemini:gemini-1.5-pro': { input: 0.00125 / 1000, output: 0.005 / 1000 },
-      'ollama:llama3': { input: 0, output: 0 }
+      'ollama:llama3': { input: 0, output: 0 },
     };
 
     const key = `${provider}:${model}`;
@@ -523,14 +551,17 @@ export class AIMetricsCollector {
 
 // ── Worker Metrics Collector ─────────────────────────────────
 export class WorkerMetricsCollector {
-  private static workers: Map<string, {
-    status: string;
-    startedAt: number;
-    tasksCompleted: number;
-    tasksFailed: number;
-    currentTask: string | null;
-    memoryUsage: NodeJS.MemoryUsage;
-  }> = new Map();
+  private static workers: Map<
+    string,
+    {
+      status: string;
+      startedAt: number;
+      tasksCompleted: number;
+      tasksFailed: number;
+      currentTask: string | null;
+      memoryUsage: NodeJS.MemoryUsage;
+    }
+  > = new Map();
 
   static registerWorker(workerId: string): void {
     this.workers.set(workerId, {
@@ -539,7 +570,7 @@ export class WorkerMetricsCollector {
       tasksCompleted: 0,
       tasksFailed: 0,
       currentTask: null,
-      memoryUsage: process.memoryUsage()
+      memoryUsage: process.memoryUsage(),
     });
 
     store.setGauge('worker_status', 1, { worker: workerId, status: 'registered' });
@@ -601,8 +632,8 @@ export class WorkerMetricsCollector {
         memoryUsage: {
           rss: Math.round(worker.memoryUsage.rss / 1024 / 1024),
           heapUsed: Math.round(worker.memoryUsage.heapUsed / 1024 / 1024),
-          heapTotal: Math.round(worker.memoryUsage.heapTotal / 1024 / 1024)
-        }
+          heapTotal: Math.round(worker.memoryUsage.heapTotal / 1024 / 1024),
+        },
       };
     }
     return stats;
@@ -619,8 +650,8 @@ export async function metricsHealthCheck(): Promise<Record<string, any>> {
       totalHttpRequests: store.getSnapshot()['http_requests_total']?.count || 0,
       totalErrors: store.getSnapshot()['http_errors_total']?.count || 0,
       dbQueries: DatabaseMetricsCollector.getStats(),
-      workers: WorkerMetricsCollector.getWorkerStats()
-    }
+      workers: WorkerMetricsCollector.getWorkerStats(),
+    },
   };
 
   try {
@@ -663,8 +694,8 @@ export function metricsSnapshotEndpoint(req: Request, res: Response): void {
       uptime: process.uptime(),
       metrics: snapshot,
       database: DatabaseMetricsCollector.getStats(),
-      workers: WorkerMetricsCollector.getWorkerStats()
-    }
+      workers: WorkerMetricsCollector.getWorkerStats(),
+    },
   });
 }
 
@@ -680,7 +711,7 @@ export function startMetricsCollection(intervalMs: number = 30000): void {
     DatabaseMetricsCollector.recordPoolStats(
       (getPool() as any)?.totalCount || 0,
       (getPool() as any)?.idleCount || 0,
-      (getPool() as any)?.waitingCount || 0
+      (getPool() as any)?.waitingCount || 0,
     );
   }, intervalMs);
   logger.info('Metrics collection started', { intervalMs });

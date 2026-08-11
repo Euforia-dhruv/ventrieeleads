@@ -33,7 +33,7 @@ class ResearchAgent {
       includeEmails: true,
       includeFinancials: false,
       deepScan: false,
-      ...options
+      ...options,
     };
 
     logger.info(`ResearchAgent: Starting research for ${companyName} (${website})`);
@@ -48,7 +48,7 @@ class ResearchAgent {
       technologies: [],
       emails: [],
       phoneNumbers: [],
-      keyPeople: []
+      keyPeople: [],
     };
 
     if (opts.includeTechStack) {
@@ -116,7 +116,7 @@ class ResearchAgent {
       { name: 'twitter', url: `https://twitter.com/${nospace}` },
       { name: 'instagram', url: `https://www.instagram.com/${nospace}` },
       { name: 'facebook', url: `https://www.facebook.com/${nospace}` },
-      { name: 'youtube', url: `https://www.youtube.com/@${nospace}` }
+      { name: 'youtube', url: `https://www.youtube.com/@${nospace}` },
     ];
 
     for (const platform of platforms) {

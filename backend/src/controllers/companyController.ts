@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import axios from 'axios';
 import { getPool } from '../database/connection';
 import { logger } from '../core/logger';
 
@@ -8,7 +9,7 @@ export async function getCompanyContacts(req: Request, res: Response): Promise<v
     const { id } = req.params;
     const result = await pool.query(
       'SELECT * FROM contacts WHERE company_id = $1 AND is_deleted = false ORDER BY is_primary DESC, confidence DESC',
-      [id]
+      [id],
     );
     res.json({ success: true, data: result.rows });
   } catch (error) {
@@ -23,7 +24,7 @@ export async function getCompanyTechnologies(req: Request, res: Response): Promi
     const { id } = req.params;
     const result = await pool.query(
       'SELECT * FROM technologies WHERE company_id = $1 AND is_deleted = false ORDER BY category, name',
-      [id]
+      [id],
     );
     res.json({ success: true, data: result.rows });
   } catch (error) {
@@ -41,7 +42,7 @@ export async function getCompanyAudit(req: Request, res: Response): Promise<void
        JOIN websites w ON w.id = a.website_id
        WHERE w.company_id = $1
        ORDER BY a.created_at DESC LIMIT 1`,
-      [id]
+      [id],
     );
     res.json({ success: true, data: result.rows[0] || null });
   } catch (error) {
@@ -62,7 +63,6 @@ export async function enrichCompany(req: Request, res: Response): Promise<void> 
     }
 
     const enqueuerUrl = process.env.TASK_ENQUEUER_URL || 'http://task-enqueuer:8002';
-    const axios = require('axios');
     await axios.post(`${enqueuerUrl}/enqueue`, {
       task: 'worker.tasks.process.process_company',
       args: [id],
@@ -94,7 +94,10 @@ export async function getCompanyDetail(req: Request, res: Response): Promise<voi
       pool.query('SELECT * FROM websites WHERE company_id = $1 AND is_deleted = false LIMIT 1', [id]),
       pool.query('SELECT * FROM technologies WHERE company_id = $1 AND is_deleted = false', [id]),
       pool.query('SELECT * FROM contacts WHERE company_id = $1 AND is_deleted = false ORDER BY is_primary DESC', [id]),
-      pool.query(`SELECT a.* FROM audits a JOIN websites w ON w.id = a.website_id WHERE w.company_id = $1 ORDER BY a.created_at DESC LIMIT 1`, [id]),
+      pool.query(
+        `SELECT a.* FROM audits a JOIN websites w ON w.id = a.website_id WHERE w.company_id = $1 ORDER BY a.created_at DESC LIMIT 1`,
+        [id],
+      ),
     ]);
 
     company.website_data = webs.rows[0] || null;

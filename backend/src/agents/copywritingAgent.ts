@@ -13,7 +13,7 @@ class CopywritingAgent {
     companyName: string,
     leadData: Record<string, any>,
     context: string,
-    options?: Partial<CopywritingOptions>
+    options?: Partial<CopywritingOptions>,
   ): { subject: string; body: string; followUpSubject: string; followUpBody: string } {
     const opts: CopywritingOptions = {
       tone: 'professional',
@@ -21,7 +21,7 @@ class CopywritingAgent {
       includeCTA: true,
       includePricing: false,
       personalized: true,
-      ...options
+      ...options,
     };
 
     logger.info(`CopywritingAgent: Generating email for ${companyName}`);
@@ -35,7 +35,7 @@ class CopywritingAgent {
   generateProposal(
     companyName: string,
     leadData: Record<string, any>,
-    auditResult?: Record<string, any>
+    auditResult?: Record<string, any>,
   ): { title: string; summary: string; scope: string[]; timeline: string; pricing: string } {
     logger.info(`CopywritingAgent: Generating proposal for ${companyName}`);
 
@@ -48,7 +48,7 @@ class CopywritingAgent {
       summary: `We have analyzed ${companyName}'s website and identified ${scope.length} key areas for improvement. This proposal outlines the recommended scope of work, timeline, and expected ROI.`,
       scope,
       timeline,
-      pricing
+      pricing,
     };
   }
 
@@ -56,14 +56,14 @@ class CopywritingAgent {
     companyName: string,
     leadData: Record<string, any>,
     context: string,
-    opts: CopywritingOptions
+    opts: CopywritingOptions,
   ): { subject: string; body: string } {
     const subjectTemplates: Record<string, string> = {
       professional: `Helping ${companyName} Grow with a Stronger Online Presence`,
       friendly: `Quick Idea for ${companyName}'s Website?`,
       persuasive: `Your Website Costing You Customers - Here's How We Can Fix That`,
       luxury: `${companyName}: Elevating Your Digital Presence`,
-      casual: `Hey ${companyName}! Got a Quick Idea?`
+      casual: `Hey ${companyName}! Got a Quick Idea?`,
     };
 
     const bodyTemplates: Record<string, string> = {
@@ -102,7 +102,7 @@ I'd like to show you exactly what's holding ${companyName} back and how we can f
 
 Want me to send over a free audit report? It only takes 2 minutes to review.`,
       luxury: `Exclusive Opportunity for ${companyName}`,
-      casual: `Hi! Quick thought about ${companyName}'s web presence...`
+      casual: `Hi! Quick thought about ${companyName}'s web presence...`,
     };
 
     const subject = subjectTemplates[opts.tone] || subjectTemplates.professional;
@@ -122,7 +122,7 @@ Want me to send over a free audit report? It only takes 2 minutes to review.`,
   private generateFollowUpEmail(
     companyName: string,
     leadData: Record<string, any>,
-    _opts: CopywritingOptions
+    _opts: CopywritingOptions,
   ): { subject: string; body: string } {
     return {
       subject: `Following Up - ${companyName} Web Opportunity`,
@@ -136,7 +136,7 @@ Would it make sense to connect briefly this week?
 
 If now isn't a good time, I completely understand. Feel free to reply when you have a moment.
 
-Best regards`
+Best regards`,
     };
   }
 
@@ -175,7 +175,7 @@ Best regards`
 
   private estimatePricing(websiteScore: number, scopeLength: number): string {
     const basePrice = websiteScore < 30 ? 15000 : websiteScore < 50 ? 25000 : websiteScore < 70 ? 40000 : 55000;
-    const multiplier = 1 + (scopeLength * 0.15);
+    const multiplier = 1 + scopeLength * 0.15;
     const total = Math.round(basePrice * multiplier);
     return `$${total.toLocaleString()} - ${Math.round(total * 1.3).toLocaleString()}`;
   }

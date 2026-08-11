@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS agent_states (
   config JSONB DEFAULT '{}',
   is_enabled BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  updated_at TIMESTAMP DEFAULT NOW(),
+  is_deleted BOOLEAN DEFAULT FALSE
 );
 
 -- Agent execution history
@@ -41,7 +42,9 @@ CREATE TABLE IF NOT EXISTS agent_executions (
   duration_ms INTEGER DEFAULT 0,
   retry_count INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT NOW(),
-  completed_at TIMESTAMP
+  completed_at TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT NOW(),
+  is_deleted BOOLEAN DEFAULT FALSE
 );
 
 -- Agent memory for persistent learning
@@ -57,7 +60,9 @@ CREATE TABLE IF NOT EXISTS agent_memory (
   access_count INTEGER DEFAULT 0,
   last_accessed_at TIMESTAMP,
   expires_at TIMESTAMP,
-  created_at TIMESTAMP DEFAULT NOW()
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  is_deleted BOOLEAN DEFAULT FALSE
 );
 
 -- Knowledge graph edges
@@ -71,6 +76,8 @@ CREATE TABLE IF NOT EXISTS knowledge_edges (
   weight FLOAT DEFAULT 1.0,
   metadata JSONB DEFAULT '{}',
   created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  is_deleted BOOLEAN DEFAULT FALSE,
   UNIQUE(source_type, source_id, target_type, target_id, relationship)
 );
 
@@ -83,7 +90,9 @@ CREATE TABLE IF NOT EXISTS agent_events (
   payload JSONB DEFAULT '{}',
   status VARCHAR(50) DEFAULT 'pending',
   processed_at TIMESTAMP,
-  created_at TIMESTAMP DEFAULT NOW()
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  is_deleted BOOLEAN DEFAULT FALSE
 );
 
 -- Executive insights (daily briefings)
@@ -99,6 +108,9 @@ CREATE TABLE IF NOT EXISTS executive_briefings (
   recommended_actions JSONB DEFAULT '[]',
   summary TEXT,
   generated_at TIMESTAMP DEFAULT NOW(),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  is_deleted BOOLEAN DEFAULT FALSE,
   UNIQUE(briefing_date, briefing_type)
 );
 
@@ -112,7 +124,9 @@ CREATE TABLE IF NOT EXISTS quality_metrics (
   metric_value FLOAT NOT NULL,
   baseline_value FLOAT,
   metadata JSONB DEFAULT '{}',
-  measured_at TIMESTAMP DEFAULT NOW()
+  measured_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  is_deleted BOOLEAN DEFAULT FALSE
 );
 
 -- Indexes for agent tables

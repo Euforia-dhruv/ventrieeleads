@@ -231,6 +231,29 @@ jobs:
       - name: Run integration tests
         run: npx jest --testPathPattern='tests/.*integration.*\.test\.ts$' --forceExit --detectOpenHandles
 
+  # ── Python Worker Tests ──────────────────────────────────────
+  python-tests:
+    name: Python Tests (Worker)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Python tests
+        run: |
+          python -m pytest tests/ ../tests/test_integration.py -q
+
   # ── Build Verification ───────────────────────────────────────
   build-backend:
     name: Build Backend (Docker)
@@ -312,7 +335,7 @@ jobs:
     needs: [
       lint-backend, typecheck-backend,
       lint-frontend, typecheck-frontend,
-      unit-tests-backend, integration-tests,
+      unit-tests-backend, integration-tests, python-tests,
       build-backend, build-frontend,
       security-scan-backend, security-scan-frontend
     ]
@@ -327,6 +350,7 @@ jobs:
             "${{ needs.typecheck-frontend.result }}"
             "${{ needs.unit-tests-backend.result }}"
             "${{ needs.integration-tests.result }}"
+            "${{ needs.python-tests.result }}"
             "${{ needs.build-backend.result }}"
             "${{ needs.build-frontend.result }}"
           )
@@ -346,6 +370,7 @@ jobs:
           echo "Type Check Frontend:  ${{ needs.typecheck-frontend.result }}"
           echo "Unit Tests Backend:   ${{ needs.unit-tests-backend.result }}"
           echo "Integration Tests:    ${{ needs.integration-tests.result }}"
+          echo "Python Tests Worker:  ${{ needs.python-tests.result }}"
           echo "Build Backend:        ${{ needs.build-backend.result }}"
           echo "Build Frontend:       ${{ needs.build-frontend.result }}"
 

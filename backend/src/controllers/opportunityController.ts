@@ -30,10 +30,13 @@ export async function estimateOpportunity(req: Request, res: Response): Promise<
     const pool = getPool();
     const { leadId } = req.params;
 
-    const leadResult = await pool.query(`
+    const leadResult = await pool.query(
+      `
       SELECT l.*, c.name as company_name, c.industry, c.city
       FROM leads l JOIN companies c ON l.company_id = c.id WHERE l.id = $1
-    `, [leadId]);
+    `,
+      [leadId],
+    );
 
     if (leadResult.rows.length === 0) {
       res.status(404).json({ success: false, message: 'Lead not found' });
@@ -42,17 +45,20 @@ export async function estimateOpportunity(req: Request, res: Response): Promise<
 
     const lead = leadResult.rows[0];
 
-    const auditResult = await pool.query(`
+    const auditResult = await pool.query(
+      `
       SELECT a.* FROM audits a
       JOIN websites w ON w.id = a.website_id
       WHERE w.company_id = $1 ORDER BY a.created_at DESC LIMIT 1
-    `, [lead.company_id]);
+    `,
+      [lead.company_id],
+    );
 
     const audit = auditResult.rows[0];
     const recommended: string[] = [];
     const est: any = {};
 
-    for (const [key, rate] of Object.entries(SERVICE_RATES)) {
+    for (const [key] of Object.entries(SERVICE_RATES)) {
       est[`${key}_min`] = 0;
       est[`${key}_max`] = 0;
     }
@@ -99,7 +105,8 @@ export async function estimateOpportunity(req: Request, res: Response): Promise<
       recommended.push('Website Redesign');
     }
 
-    let totalMin = 0, totalMax = 0;
+    let totalMin = 0,
+      totalMax = 0;
     for (const key of Object.keys(SERVICE_RATES)) {
       totalMin += est[`${key}_min`];
       totalMax += est[`${key}_max`];
@@ -118,24 +125,37 @@ export async function estimateOpportunity(req: Request, res: Response): Promise<
       priority,
     };
 
-    await pool.query(`
-      INSERT INTO opportunities (lead_id, ${Object.keys(SERVICE_RATES).map(k => k + '_min, ' + k + '_max').join(', ')},
+    await pool.query(
+      `
+      INSERT INTO opportunities (lead_id, ${Object.keys(SERVICE_RATES)
+        .map((k) => k + '_min, ' + k + '_max')
+        .join(', ')},
         total_min, total_max, confidence, recommended_services, priority)
-      VALUES ($1, ${Object.keys(SERVICE_RATES).map((_, i) => `$${i * 2 + 2}, $${i * 2 + 3}`).join(', ')},
+      VALUES ($1, ${Object.keys(SERVICE_RATES)
+        .map((_, i) => `$${i * 2 + 2}, $${i * 2 + 3}`)
+        .join(', ')},
         $${Object.keys(SERVICE_RATES).length * 2 + 2}, $${Object.keys(SERVICE_RATES).length * 2 + 3},
         $${Object.keys(SERVICE_RATES).length * 2 + 4}, $${Object.keys(SERVICE_RATES).length * 2 + 5}::jsonb,
         $${Object.keys(SERVICE_RATES).length * 2 + 6})
       ON CONFLICT (lead_id) DO UPDATE SET
-        ${Object.keys(SERVICE_RATES).map(k => `${k}_min = EXCLUDED.${k}_min, ${k}_max = EXCLUDED.${k}_max`).join(', ')},
+        ${Object.keys(SERVICE_RATES)
+          .map((k) => `${k}_min = EXCLUDED.${k}_min, ${k}_max = EXCLUDED.${k}_max`)
+          .join(', ')},
         total_min = EXCLUDED.total_min, total_max = EXCLUDED.total_max,
         confidence = EXCLUDED.confidence, recommended_services = EXCLUDED.recommended_services,
         priority = EXCLUDED.priority, updated_at = NOW()
       RETURNING *
-    `, [
-      leadId,
-      ...Object.keys(SERVICE_RATES).flatMap(k => [oppData[`${k}_min`], oppData[`${k}_max`]]),
-      totalMin, totalMax, confidence, JSON.stringify(recommended), priority
-    ]);
+    `,
+      [
+        leadId,
+        ...Object.keys(SERVICE_RATES).flatMap((k) => [oppData[`${k}_min`], oppData[`${k}_max`]]),
+        totalMin,
+        totalMax,
+        confidence,
+        JSON.stringify(recommended),
+        priority,
+      ],
+    );
 
     res.json({
       success: true,
@@ -147,7 +167,7 @@ export async function estimateOpportunity(req: Request, res: Response): Promise<
         confidence,
         recommended_services: recommended,
         priority,
-      }
+      },
     });
   } catch (error) {
     logger.error('Error estimating opportunity:', error);

@@ -19,10 +19,7 @@ async function proxy(request: NextRequest, path: string, method: string = 'GET')
   }
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return proxy(request, `/api/settings/api-keys/${id}`, 'DELETE');
 }

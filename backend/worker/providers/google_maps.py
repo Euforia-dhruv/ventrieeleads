@@ -38,7 +38,9 @@ class GoogleMapsProvider(BaseProvider):
             location=location,
             max_results=max_results,
             min_rating=min_rating,
-            min_reviews=min_reviews
+            min_reviews=min_reviews,
+            lat=kwargs.get("lat", 0),
+            lng=kwargs.get("lng", 0)
         )
 
         return [self._normalize_gm(r) for r in results]
@@ -53,11 +55,11 @@ class GoogleMapsProvider(BaseProvider):
         min_reviews: int = 0,
         **kwargs
     ) -> List[NormalizedLead]:
-        location_str = f"{lat},{lng}"
         from worker.scrapers.google_maps import google_maps_scraper
         results = await google_maps_scraper.search(
-            query=query, location=location_str,
-            max_results=max_results, min_rating=min_rating, min_reviews=min_reviews
+            query=query, location=f"{lat},{lng}",
+            max_results=max_results, min_rating=min_rating, min_reviews=min_reviews,
+            lat=lat, lng=lng
         )
         return [self._normalize_gm(r) for r in results]
 

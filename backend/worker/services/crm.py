@@ -41,11 +41,21 @@ class CRMService:
             db.add(lead)
             db.flush()
 
-            # Auto-assign to "New" stage
-            stage = db.query(PipelineStage).filter(PipelineStage.name == "New").first()
+            # Auto-assign to the first active pipeline stage
+            stage = db.query(PipelineStage).filter(
+                PipelineStage.is_active == True
+            ).order_by(PipelineStage.sort_order.asc()).first()
             if stage:
-                db.add(LeadPipeline(lead_id=lead.id, stage_id=stage.id))
-                db.add(PipelineEvent(lead_id=lead.id, from_stage=None, to_stage_id=stage.id, event_type="created"))
+                entry = LeadPipeline(lead_id=lead.id, company_id=lead.company_id, stage_id=stage.id)
+                db.add(entry)
+                db.flush()
+                db.add(PipelineEvent(
+                    lead_id=lead.id,
+                    pipeline_id=entry.id,
+                    from_stage_id=None,
+                    to_stage_id=stage.id,
+                    confidence=0.5,
+                ))
 
             db.commit()
             return lead
@@ -83,14 +93,17 @@ class CRMService:
                 current.stage_id = new_stage.id
                 current.updated_at = datetime.utcnow()
             else:
-                db.add(LeadPipeline(lead_id=lead_id, stage_id=new_stage.id))
+                current = LeadPipeline(lead_id=lead_id, company_id=lead.company_id, stage_id=new_stage.id)
+                db.add(current)
+                db.flush()
 
             db.add(PipelineEvent(
                 lead_id=lead_id,
+                pipeline_id=current.id,
                 from_stage_id=from_stage,
                 to_stage_id=new_stage.id,
-                event_type="stage_change",
-                notes=notes,
+                confidence=0.5,
+                reason=notes or None,
             ))
 
             lead.status = stage_name.lower()
@@ -153,11 +166,11 @@ class CRMService:
                     "leads": [
                         {
                             "id": str(l.id),
-                            "name": l.company_name or l.name or "Unknown",
+                            "name": (l.company.name if l.company else None) or "Unknown",
                             "score": l.score or 0,
                             "status": l.status,
-                            "industry": l.industry or "",
-                            "city": l.city or "",
+                            "industry": (l.company.industry if l.company else "") or "",
+                            "city": (l.company.city if l.company else "") or "",
                             "created_at": l.created_at.isoformat() if l.created_at else None,
                         }
                         for l in leads

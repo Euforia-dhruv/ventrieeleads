@@ -15,6 +15,7 @@ class DubaiDirectoryProvider(BaseProvider):
     description = "Dubai business directory listings (UAE only)"
     requires_browser = False
     supported_countries = ["UAE"]
+    supports_map_search = True
 
     async def search(
         self,

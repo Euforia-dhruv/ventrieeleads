@@ -8,7 +8,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const res = await fetch(`${API_URL}/api/companies/${id}/contacts`);
     const data = await res.json();
     return NextResponse.json(data);
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, data: [] }, { status: 500 });
   }
 }

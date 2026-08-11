@@ -50,6 +50,7 @@
     "ws": "^8.21.1"
   },
   "devDependencies": {
+    "@eslint/js": "^8.57.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.8.1",
     "@types/cookie": "^0.6.0",
@@ -74,7 +75,8 @@
     "supertest": "^7.2.2",
     "ts-jest": "^29.2.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.57.1"
   },
   "lint-staged": {
     "*.{ts,js}": [

@@ -13,7 +13,10 @@ export class NotFoundError extends Error {
 }
 
 export class ValidationError extends Error {
-  constructor(message: string, public errors: any[] = []) {
+  constructor(
+    message: string,
+    public errors: any[] = [],
+  ) {
     super(message);
     this.name = 'ValidationError';
   }
@@ -26,12 +29,7 @@ export class DatabaseError extends Error {
   }
 }
 
-export function errorHandler(
-  err: AppError,
-  req: any,
-  res: any,
-  next: any
-): void {
+export function errorHandler(err: AppError, req: any, res: any, _next: any): void {
   const statusCode = err.status || 500;
   const isProduction = process.env.NODE_ENV === 'production';
 
@@ -41,14 +39,14 @@ export function errorHandler(
     url: req.url,
     method: req.method,
     ip: req.ip,
-    userAgent: req.get('User-Agent')
+    userAgent: req.get('User-Agent'),
   });
 
   if (err.name === 'ValidationError') {
     res.status(400).json({
       success: false,
       message: err.message,
-      errors: err.errors || []
+      errors: err.errors || [],
     });
     return;
   }
@@ -56,7 +54,7 @@ export function errorHandler(
   if (err.name === 'NotFoundError') {
     res.status(404).json({
       success: false,
-      message: err.message
+      message: err.message,
     });
     return;
   }
@@ -64,6 +62,6 @@ export function errorHandler(
   res.status(statusCode).json({
     success: false,
     message: isProduction ? 'Internal server error' : err.message,
-    ...(isProduction ? {} : { stack: err.stack })
+    ...(isProduction ? {} : { stack: err.stack }),
   });
 }

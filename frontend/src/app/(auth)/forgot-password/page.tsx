@@ -40,11 +40,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md"
-      >
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2">
             <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
@@ -65,7 +61,9 @@ export default function ForgotPasswordPage() {
                   If an account exists with <strong>{email}</strong>, we&apos;ve sent a password reset link.
                 </p>
                 <Link href="/login">
-                  <Button variant="outline" className="w-full">Back to Login</Button>
+                  <Button variant="outline" className="w-full">
+                    Back to Login
+                  </Button>
                 </Link>
               </div>
             ) : (

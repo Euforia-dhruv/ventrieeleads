@@ -4,28 +4,6 @@ import { logger } from '../core/logger';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 
-interface SearchJob {
-  id: string;
-  query: string;
-  country: string;
-  city: string;
-  area: string;
-  industry: string;
-  keyword: string;
-  min_rating: number;
-  min_reviews: number;
-  max_results: number;
-  status: string;
-  progress: number;
-  results_count: number;
-  error_message: string | null;
-  celery_task_id: string | null;
-  started_at: Date | null;
-  completed_at: Date | null;
-  created_at: Date;
-  updated_at: Date;
-}
-
 export async function createSearchJob(req: Request, res: Response): Promise<void> {
   try {
     const {
@@ -39,13 +17,16 @@ export async function createSearchJob(req: Request, res: Response): Promise<void
       min_rating = 0,
       min_reviews = 0,
       max_results = 50,
-      provider
+      provider,
+      lat,
+      lng,
+      radius_km = 10,
     } = req.body;
 
     if (!query && !industry && !keyword) {
       res.status(400).json({
         success: false,
-        message: 'At least one of query, industry, or keyword is required'
+        message: 'At least one of query, industry, or keyword is required',
       });
       return;
     }
@@ -56,15 +37,36 @@ export async function createSearchJob(req: Request, res: Response): Promise<void
     const finalArea = area;
     const metadata: Record<string, unknown> = {};
     if (provider) metadata.provider = provider;
+    const hasCoords = lat !== undefined && lat !== null && lng !== undefined && lng !== null;
+    if (hasCoords) {
+      metadata.lat = Number(lat);
+      metadata.lng = Number(lng);
+      metadata.radius_km = Number(radius_km) || 10;
+    }
 
     const jobId = uuidv4();
     const pool = getPool();
 
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       INSERT INTO search_jobs (id, query, country, city, area, industry, keyword, min_rating, min_reviews, max_results, status, metadata)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'queued', $11::jsonb)
       RETURNING *
-    `, [jobId, searchQuery, finalCountry, finalCity, finalArea, industry, keyword, min_rating, min_reviews, max_results, JSON.stringify(metadata)]);
+    `,
+      [
+        jobId,
+        searchQuery,
+        finalCountry,
+        finalCity,
+        finalArea,
+        industry,
+        keyword,
+        min_rating,
+        min_reviews,
+        max_results,
+        JSON.stringify(metadata),
+      ],
+    );
 
     const job = result.rows[0];
 
@@ -95,8 +97,11 @@ export async function createSearchJob(req: Request, res: Response): Promise<void
         status: job.status,
         progress: job.progress,
         results_count: job.results_count,
-        created_at: job.created_at
-      }
+        created_at: job.created_at,
+        lat: metadata.lat ?? null,
+        lng: metadata.lng ?? null,
+        radius_km: metadata.radius_km ?? null,
+      },
     });
   } catch (error) {
     logger.error('Error creating search job:', error);
@@ -124,7 +129,7 @@ export async function listSearchJobs(req: Request, res: Response): Promise<void>
 
     const countResult = await pool.query(
       `SELECT COUNT(*) FROM search_jobs${status ? ' WHERE status = $1' : ''}`,
-      status ? [status] : []
+      status ? [status] : [],
     );
     const total = parseInt(countResult.rows[0].count);
 
@@ -140,8 +145,8 @@ export async function listSearchJobs(req: Request, res: Response): Promise<void>
         page,
         limit,
         total,
-        pages: Math.ceil(total / limit)
-      }
+        pages: Math.ceil(total / limit),
+      },
     });
   } catch (error) {
     logger.error('Error listing search jobs:', error);
@@ -164,7 +169,8 @@ export async function getSearchJob(req: Request, res: Response): Promise<void> {
     const job = result.rows[0];
 
     if (job.status === 'completed' || job.status === 'failed' || job.status === 'running') {
-      const resultsQuery = await pool.query(`
+      const resultsQuery = await pool.query(
+        `
         SELECT
           c.id, c.name, c.website, c.phone, c.email, c.industry,
           c.city, c.country, c.area, c.address,
@@ -173,23 +179,30 @@ export async function getSearchJob(req: Request, res: Response): Promise<void> {
           c.google_maps_url, c.description,
           c.twitter, c.tiktok, c.snapchat,
           c.employee_count, c.founded_year,
-          (c.metadata->>'lead_score')::int as lead_score,
-          (c.metadata->>'website_score')::int as website_score,
-          (c.metadata->>'seo_score')::int as seo_score,
-          (c.metadata->>'design_score')::int as design_score,
-          (c.metadata->>'opportunity_score')::int as opportunity_score,
-          c.metadata->>'ai_recommendation' as ai_recommendation,
+          COALESCE(l.score, (c.metadata->>'lead_score')::int, 0) as lead_score,
+          COALESCE(l.score_label, 'cold') as score_label,
+          COALESCE((wa.checks->>'website_score')::int, 0) as website_score,
+          COALESCE(wa.seo_score, 0) as seo_score,
+          COALESCE(wa.design_score, 0) as design_score,
+          COALESCE(wa.overall_score, 0) as opportunity_score,
+          wa.recommended_services as ai_recommendation,
           jsonb_build_object(
-            'linkedin', c.metadata->>'linkedin_url',
-            'instagram', c.metadata->>'instagram_url',
-            'facebook', c.metadata->>'facebook_url',
+            'linkedin', COalesce(w.linkedin, c.metadata->>'linkedin_url'),
+            'instagram', COALESCE(w.instagram, c.metadata->>'instagram_url'),
+            'facebook', COALESCE(w.facebook, c.metadata->>'facebook_url'),
+            'whatsapp', COALESCE(w.whatsapp, ''),
             'twitter', c.twitter
           ) as social_links
         FROM search_results sr
         JOIN companies c ON sr.company_id = c.id
-        WHERE sr.search_job_id = $1 AND sr.is_duplicate = false AND c.is_deleted = false
-        ORDER BY (c.metadata->>'lead_score')::int DESC NULLS LAST
-      `, [id]);
+        LEFT JOIN leads l ON l.company_id = c.id AND l.is_deleted = false
+        LEFT JOIN websites w ON w.company_id = c.id
+        LEFT JOIN audits wa ON wa.website_id = w.id
+        WHERE sr.search_job_id = $1 AND c.is_deleted = false
+        ORDER BY COALESCE(l.score, 0) DESC NULLS LAST
+      `,
+        [id],
+      );
 
       job.results = resultsQuery.rows;
       job.results_count = resultsQuery.rows.length;
@@ -211,7 +224,7 @@ export async function cancelSearchJob(req: Request, res: Response): Promise<void
       `UPDATE search_jobs SET status = 'cancelled', completed_at = NOW(), updated_at = NOW()
        WHERE id = $1 AND status IN ('queued', 'running')
        RETURNING *`,
-      [id]
+      [id],
     );
 
     if (result.rows.length === 0) {

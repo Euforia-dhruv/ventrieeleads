@@ -33,7 +33,7 @@ class AuditAgent {
       estimatedProjectValue: 'pending',
       issues: [],
       recommendations: [],
-      checks: {}
+      checks: {},
     };
 
     try {
@@ -49,7 +49,7 @@ class AuditAgent {
       auditResult.checks.hasCTAs = this.checkCTAs(html);
       auditResult.checks.hasBooking = this.checkBooking(html);
       auditResult.checks.hasBrokenImages = await this.checkBrokenImages(url, html);
-      auditResult.checks.speed = await this.checkSpeed(url) as unknown as boolean;
+      auditResult.checks.speed = (await this.checkSpeed(url)) as unknown as boolean;
 
       auditResult.seoScore = await this.calculateSEO(html, url);
       auditResult.websiteScore = this.calculateWebsiteScore(auditResult.checks);
@@ -60,14 +60,16 @@ class AuditAgent {
 
       auditResult.recommendations = this.generateRecommendations(auditResult);
 
-      logger.info(`AuditAgent: Audit complete for ${url}. Scores: Business=${auditResult.businessScore}, Website=${auditResult.websiteScore}, SEO=${auditResult.seoScore}, Conversion=${auditResult.conversionScore}`);
+      logger.info(
+        `AuditAgent: Audit complete for ${url}. Scores: Business=${auditResult.businessScore}, Website=${auditResult.websiteScore}, SEO=${auditResult.seoScore}, Conversion=${auditResult.conversionScore}`,
+      );
     } catch (error) {
       logger.error(`AuditAgent: Audit failed for ${url}:`, error);
       auditResult.issues.push({
         category: 'accessibility',
         severity: 'critical',
         title: 'Website Unreachable',
-        description: `Could not access ${url}: ${(error as Error).message}`
+        description: `Could not access ${url}: ${(error as Error).message}`,
       });
     }
 
@@ -149,7 +151,7 @@ class AuditAgent {
 
   private calculateWebsiteScore(checks: Record<string, boolean | string>): number {
     const totalChecks = Object.keys(checks).length;
-    const passedChecks = Object.values(checks).filter(v => v === true || v === 'fast').length;
+    const passedChecks = Object.values(checks).filter((v) => v === true || v === 'fast').length;
 
     if (totalChecks === 0) return 0;
     return Math.round((passedChecks / totalChecks) * 100);
@@ -167,7 +169,7 @@ class AuditAgent {
       { pattern: /team|our people|staff|employees/i, points: 5 },
       { pattern: /blog|news|insights|articles/i, points: 5 },
       { pattern: /\d{4}\s*(est|founded|since)/i, points: 5 },
-      { pattern: /\|\s*[\d,]+\s*(employees|staff|team)/i, points: 10 }
+      { pattern: /\|\s*[\d,]+\s*(employees|staff|team)/i, points: 10 },
     ];
 
     for (const indicator of indicators) {

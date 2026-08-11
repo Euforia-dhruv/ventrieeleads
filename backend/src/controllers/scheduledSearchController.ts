@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import axios from 'axios';
 import { getPool } from '../database/connection';
 import { logger } from '../core/logger';
 import { v4 as uuidv4 } from 'uuid';
@@ -17,8 +18,20 @@ export async function listScheduledSearches(req: Request, res: Response): Promis
 export async function createScheduledSearch(req: Request, res: Response): Promise<void> {
   try {
     const pool = getPool();
-    const { name, query, country = '', city = '', area = '', industry = '', keyword = '',
-            min_rating, min_reviews, max_results = 50, schedule_type = 'daily', cron_expression } = req.body;
+    const {
+      name,
+      query,
+      country = '',
+      city = '',
+      area = '',
+      industry = '',
+      keyword = '',
+      min_rating,
+      min_reviews,
+      max_results = 50,
+      schedule_type = 'daily',
+      cron_expression,
+    } = req.body;
 
     if (!name || !query) {
       res.status(400).json({ success: false, message: 'Name and query are required' });
@@ -26,13 +39,30 @@ export async function createScheduledSearch(req: Request, res: Response): Promis
     }
 
     const nextRun = computeNextRun(schedule_type, cron_expression);
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       INSERT INTO scheduled_searches (id, name, query, country, city, area, industry, keyword,
         min_rating, min_reviews, max_results, schedule_type, cron_expression, next_run_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *
-    `, [uuidv4(), name, query, country, city, area, industry, keyword,
-        min_rating || null, min_reviews || null, max_results, schedule_type, cron_expression || null, nextRun]);
+    `,
+      [
+        uuidv4(),
+        name,
+        query,
+        country,
+        city,
+        area,
+        industry,
+        keyword,
+        min_rating || null,
+        min_reviews || null,
+        max_results,
+        schedule_type,
+        cron_expression || null,
+        nextRun,
+      ],
+    );
 
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error) {
@@ -47,8 +77,21 @@ export async function updateScheduledSearch(req: Request, res: Response): Promis
     const { id } = req.params;
     const updates = req.body;
 
-    const allowed = ['name', 'query', 'country', 'city', 'area', 'industry', 'keyword',
-                     'min_rating', 'min_reviews', 'max_results', 'schedule_type', 'cron_expression', 'is_active'];
+    const allowed = [
+      'name',
+      'query',
+      'country',
+      'city',
+      'area',
+      'industry',
+      'keyword',
+      'min_rating',
+      'min_reviews',
+      'max_results',
+      'schedule_type',
+      'cron_expression',
+      'is_active',
+    ];
     const sets: string[] = [];
     const values: any[] = [];
     let idx = 1;
@@ -69,7 +112,8 @@ export async function updateScheduledSearch(req: Request, res: Response): Promis
     values.push(id);
 
     const result = await pool.query(
-      `UPDATE scheduled_searches SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`, values
+      `UPDATE scheduled_searches SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
+      values,
     );
 
     if (result.rows.length === 0) {
@@ -105,13 +149,15 @@ export async function runScheduledSearchNow(req: Request, res: Response): Promis
     }
     const s = ss.rows[0];
     const jobId = uuidv4();
-    await pool.query(`
+    await pool.query(
+      `
       INSERT INTO search_jobs (id, query, country, city, area, industry, keyword, min_rating, min_reviews, max_results, status)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'queued')
-    `, [jobId, s.query, s.country, s.city, s.area, s.industry, s.keyword, s.min_rating, s.min_reviews, s.max_results]);
+    `,
+      [jobId, s.query, s.country, s.city, s.area, s.industry, s.keyword, s.min_rating, s.min_reviews, s.max_results],
+    );
 
     try {
-      const axios = require('axios');
       const enqueuerUrl = process.env.TASK_ENQUEUER_URL || 'http://task-enqueuer:8002';
       await axios.post(`${enqueuerUrl}/enqueue`, {
         task: 'worker.tasks.search.discover_businesses',
@@ -125,7 +171,7 @@ export async function runScheduledSearchNow(req: Request, res: Response): Promis
 
     await pool.query(
       'UPDATE scheduled_searches SET last_run_at = NOW(), total_runs = total_runs + 1, updated_at = NOW() WHERE id = $1',
-      [id]
+      [id],
     );
 
     res.json({ success: true, data: { job_id: jobId } });
@@ -135,13 +181,20 @@ export async function runScheduledSearchNow(req: Request, res: Response): Promis
   }
 }
 
-function computeNextRun(type: string, cron?: string): Date {
+function computeNextRun(type: string, _cron?: string): Date {
   const now = new Date();
   switch (type) {
-    case 'daily': now.setDate(now.getDate() + 1); break;
-    case 'weekly': now.setDate(now.getDate() + 7); break;
-    case 'monthly': now.setMonth(now.getMonth() + 1); break;
-    default: now.setDate(now.getDate() + 1);
+    case 'daily':
+      now.setDate(now.getDate() + 1);
+      break;
+    case 'weekly':
+      now.setDate(now.getDate() + 7);
+      break;
+    case 'monthly':
+      now.setMonth(now.getMonth() + 1);
+      break;
+    default:
+      now.setDate(now.getDate() + 1);
   }
   return now;
 }

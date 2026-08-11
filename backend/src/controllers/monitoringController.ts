@@ -10,7 +10,7 @@ export const getMonitoringSchedule = async (req: Request, res: Response): Promis
       `SELECT * FROM monitoring_schedules
        WHERE company_id = $1 AND is_deleted = false
        ORDER BY created_at DESC LIMIT 1`,
-      [id]
+      [id],
     );
     res.json({ success: true, data: result.rows[0] || null });
   } catch (error) {
@@ -59,7 +59,7 @@ export const getMonitoringHistory = async (req: Request, res: Response): Promise
       `SELECT * FROM monitoring_snapshots
        WHERE company_id = $1
        ORDER BY created_at DESC LIMIT 50`,
-      [id]
+      [id],
     );
     res.json({ success: true, data: result.rows });
   } catch (error) {

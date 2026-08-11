@@ -134,7 +134,7 @@ class AuditLogService {
         const entry = batch[i];
         const idx = i * 17 + 1;
         placeholders.push(
-          `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4}, $${idx + 5}, $${idx + 6}, $${idx + 7}, $${idx + 8}, $${idx + 9}, $${idx + 10}, $${idx + 11}, $${idx + 12}, $${idx + 13}, $${idx + 14}, $${idx + 15}, $${idx + 16})`
+          `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4}, $${idx + 5}, $${idx + 6}, $${idx + 7}, $${idx + 8}, $${idx + 9}, $${idx + 10}, $${idx + 11}, $${idx + 12}, $${idx + 13}, $${idx + 14}, $${idx + 15}, $${idx + 16})`,
         );
         values.push([
           entry.workspace_id,
@@ -153,7 +153,7 @@ class AuditLogService {
           entry.ip_address || null,
           entry.user_agent || null,
           entry.request_id || null,
-          entry.status
+          entry.status,
         ]);
       }
 
@@ -181,10 +181,14 @@ class AuditLogService {
     try {
       const client = redisClient.getClient();
       const key = `${this.REDIS_KEY_PREFIX}${entry.workspace_id}:${entry.event_type}`;
-      await client.setEx(key, this.CACHE_TTL, JSON.stringify({
-        ...entry,
-        cached_at: new Date().toISOString()
-      }));
+      await client.setEx(
+        key,
+        this.CACHE_TTL,
+        JSON.stringify({
+          ...entry,
+          cached_at: new Date().toISOString(),
+        }),
+      );
     } catch {
       // Redis optional
     }
@@ -199,23 +203,33 @@ class AuditLogService {
     }
   }
 
-  private extractRequestInfo(req?: any): { ip_address?: string; user_agent?: string; request_id?: string; trace_id?: string } {
+  private extractRequestInfo(req?: any): {
+    ip_address?: string;
+    user_agent?: string;
+    request_id?: string;
+    trace_id?: string;
+  } {
     if (!req) return {};
     return {
       ip_address: req.ip || req.socket?.remoteAddress,
       user_agent: req.headers?.['user-agent'],
       request_id: req.headers?.['x-request-id'],
-      trace_id: (req as any)?.traceId
+      trace_id: (req as any)?.traceId,
     };
   }
 
-  private extractUserInfo(req?: any): { user_id?: string; user_email?: string; user_name?: string; workspace_id?: string } {
+  private extractUserInfo(req?: any): {
+    user_id?: string;
+    user_email?: string;
+    user_name?: string;
+    workspace_id?: string;
+  } {
     if (!req?.user) return {};
     return {
       user_id: req.user.id,
       user_email: req.user.email,
       user_name: req.user.name,
-      workspace_id: req.user.workspace_id || req.workspaceId
+      workspace_id: req.user.workspace_id || req.workspaceId,
     };
   }
 
@@ -230,7 +244,7 @@ class AuditLogService {
       description?: string;
       metadata?: Record<string, any>;
       status?: 'success' | 'failure' | 'error';
-    }
+    },
   ): Promise<void> {
     const entry: AuditLogEntry = {
       workspace_id: details?.workspace_id || req?.user?.workspace_id || req?.workspaceId || 'system',
@@ -243,7 +257,7 @@ class AuditLogService {
       metadata: details?.metadata,
       status: details?.status || 'success',
       ...this.extractRequestInfo(req),
-      ...this.extractUserInfo(req)
+      ...this.extractUserInfo(req),
     };
 
     await this.writeLog(entry);
@@ -252,7 +266,7 @@ class AuditLogService {
       event_type: eventType,
       user_id: entry.user_id,
       status: entry.status,
-      ip: entry.ip_address
+      ip: entry.ip_address,
     });
   }
 
@@ -268,7 +282,7 @@ class AuditLogService {
       description?: string;
       metadata?: Record<string, any>;
       status?: 'success' | 'failure' | 'error';
-    }
+    },
   ): Promise<void> {
     const entry: AuditLogEntry = {
       workspace_id: details?.workspace_id || req?.user?.workspace_id || req?.workspaceId || 'system',
@@ -282,7 +296,7 @@ class AuditLogService {
       metadata: details?.metadata,
       status: details?.status || 'success',
       ...this.extractRequestInfo(req),
-      ...this.extractUserInfo(req)
+      ...this.extractUserInfo(req),
     };
 
     await this.writeLog(entry);
@@ -301,7 +315,7 @@ class AuditLogService {
       changes?: Record<string, { before: any; after: any }>;
       metadata?: Record<string, any>;
       status?: 'success' | 'failure' | 'error';
-    }
+    },
   ): Promise<void> {
     const entry: AuditLogEntry = {
       workspace_id: details?.workspace_id || req?.user?.workspace_id || req?.workspaceId || 'system',
@@ -316,7 +330,7 @@ class AuditLogService {
       metadata: details?.metadata,
       status: details?.status || 'success',
       ...this.extractRequestInfo(req),
-      ...this.extractUserInfo(req)
+      ...this.extractUserInfo(req),
     };
 
     await this.writeLog(entry);
@@ -326,7 +340,7 @@ class AuditLogService {
       user_id: entry.user_id,
       resource: `${details?.resource_type}:${details?.resource_id}`,
       changes: details?.changes ? Object.keys(details.changes) : undefined,
-      ip: entry.ip_address
+      ip: entry.ip_address,
     });
   }
 
@@ -343,7 +357,7 @@ class AuditLogService {
       changes?: Record<string, { before: any; after: any }>;
       metadata?: Record<string, any>;
       status?: 'success' | 'failure' | 'error';
-    }
+    },
   ): Promise<void> {
     const entry: AuditLogEntry = {
       workspace_id: details?.workspace_id || req?.user?.workspace_id || req?.workspaceId || 'system',
@@ -358,7 +372,7 @@ class AuditLogService {
       metadata: details?.metadata,
       status: details?.status || 'success',
       ...this.extractRequestInfo(req),
-      ...this.extractUserInfo(req)
+      ...this.extractUserInfo(req),
     };
 
     await this.writeLog(entry);
@@ -374,7 +388,7 @@ class AuditLogService {
       description: string;
       metadata?: Record<string, any>;
       status?: 'success' | 'failure' | 'error';
-    }
+    },
   ): Promise<void> {
     const entry: AuditLogEntry = {
       workspace_id: details.workspace_id || 'system',
@@ -385,7 +399,7 @@ class AuditLogService {
       action: this.eventTypeToAction(eventType),
       description: details.description,
       metadata: details.metadata,
-      status: details.status || 'success'
+      status: details.status || 'success',
     };
 
     await this.writeLog(entry);
@@ -401,7 +415,7 @@ class AuditLogService {
       resource_id?: string;
       description?: string;
       metadata?: Record<string, any>;
-    }
+    },
   ): Promise<void> {
     const entry: AuditLogEntry = {
       workspace_id: details?.workspace_id || req?.user?.workspace_id || req?.workspaceId || 'system',
@@ -414,7 +428,7 @@ class AuditLogService {
       metadata: details?.metadata,
       status: 'failure',
       ...this.extractRequestInfo(req),
-      ...this.extractUserInfo(req)
+      ...this.extractUserInfo(req),
     };
 
     await this.writeLog(entry);
@@ -423,7 +437,7 @@ class AuditLogService {
       event_type: eventType,
       ip: entry.ip_address,
       user_agent: entry.user_agent,
-      description: entry.description
+      description: entry.description,
     });
   }
 
@@ -549,7 +563,7 @@ class AuditLogService {
     const validSortColumns: Record<string, string> = {
       created_at: 'created_at',
       category: 'category',
-      event_type: 'event_type'
+      event_type: 'event_type',
     };
     const sortColumn = validSortColumns[filters.order_by || 'created_at'] || 'created_at';
     const sortDirection = filters.order_direction === 'asc' ? 'ASC' : 'DESC';
@@ -565,7 +579,7 @@ class AuditLogService {
     const logs = result.rows.map((row: any) => ({
       ...row,
       changes: row.changes ? JSON.parse(row.changes) : null,
-      metadata: row.metadata ? JSON.parse(row.metadata) : null
+      metadata: row.metadata ? JSON.parse(row.metadata) : null,
     }));
 
     return {
@@ -573,7 +587,7 @@ class AuditLogService {
       total,
       page: Math.floor(offset / limit) + 1,
       limit,
-      pages: Math.ceil(total / limit)
+      pages: Math.ceil(total / limit),
     };
   }
 
@@ -625,7 +639,7 @@ class AuditLogService {
       ai_request: 'AI request',
       agent_run: 'Agent run',
       campaign_activated: 'Campaign activated',
-      campaign_paused: 'Campaign paused'
+      campaign_paused: 'Campaign paused',
     };
 
     return actionMap[eventType] || eventType;
@@ -637,32 +651,41 @@ class AuditLogService {
 
   async getStats(workspaceId: string): Promise<Record<string, any>> {
     const pool = getPool();
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT category, event_type, status, COUNT(*) as count,
              MIN(created_at) as earliest, MAX(created_at) as latest
       FROM audit_logs
       WHERE workspace_id = $1 AND created_at > NOW() - INTERVAL '24 hours'
       GROUP BY category, event_type, status
       ORDER BY count DESC
-    `, [workspaceId]);
+    `,
+      [workspaceId],
+    );
 
-    const failedResult = await pool.query(`
+    const failedResult = await pool.query(
+      `
       SELECT COUNT(*) as count
       FROM audit_logs
       WHERE workspace_id = $1 AND status = 'failure' AND created_at > NOW() - INTERVAL '24 hours'
-    `, [workspaceId]);
+    `,
+      [workspaceId],
+    );
 
-    const uniqueUsers = await pool.query(`
+    const uniqueUsers = await pool.query(
+      `
       SELECT COUNT(DISTINCT user_id) as count
       FROM audit_logs
       WHERE workspace_id = $1 AND created_at > NOW() - INTERVAL '24 hours'
-    `, [workspaceId]);
+    `,
+      [workspaceId],
+    );
 
     return {
       events: result.rows,
       failedCount: parseInt(failedResult.rows[0].count),
       uniqueUsers: parseInt(uniqueUsers.rows[0].count),
-      totalEvents: result.rows.reduce((sum: number, row: any) => sum + parseInt(row.count), 0)
+      totalEvents: result.rows.reduce((sum: number, row: any) => sum + parseInt(row.count), 0),
     };
   }
 }

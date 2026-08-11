@@ -21,11 +21,8 @@ export async function connectToDatabase(): Promise<void> {
       database: process.env.DB_NAME || 'leads',
       password: process.env.DB_PASSWORD || 'password',
       port: parseInt(process.env.DB_PORT || '5432'),
-      ssl: process.env.DB_SSL === 'true'
+      ssl: process.env.DB_SSL === 'true',
     };
-
-    const connectionString = 
-      `postgresql://${config.user}:${config.password}@${config.host}:${config.port}/${config.database}`;
 
     if (process.env.DATABASE_URL) {
       pool = new Pool({ connectionString: process.env.DATABASE_URL });

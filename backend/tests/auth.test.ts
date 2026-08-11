@@ -109,9 +109,11 @@ describe('Auth Controller - Registration', () => {
 
     pool.query
       .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ id: 'ws-123' }] })
       .mockResolvedValueOnce({ rows: [mockUser] })
       .mockResolvedValueOnce({ rows: [{ id: 'role-1' }] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
 
     const app = express();
@@ -218,9 +220,11 @@ describe('Auth Controller - Registration', () => {
 
     pool.query
       .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ id: 'ws-123' }] })
       .mockResolvedValueOnce({ rows: [mockUser] })
       .mockResolvedValueOnce({ rows: [{ id: 'role-1' }] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
 
     const app = express();

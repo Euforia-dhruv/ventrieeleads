@@ -46,11 +46,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md"
-      >
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2">
             <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
@@ -138,17 +134,19 @@ export default function LoginPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <Button variant="outline" onClick={() => window.location.href = '/api/auth/google'}>
+              <Button variant="outline" onClick={() => (window.location.href = '/api/auth/google')}>
                 Google
               </Button>
-              <Button variant="outline" onClick={() => window.location.href = '/api/auth/github'}>
+              <Button variant="outline" onClick={() => (window.location.href = '/api/auth/github')}>
                 GitHub
               </Button>
             </div>
 
             <div className="mt-6 text-center text-sm text-muted-foreground">
               Don&apos;t have an account?{' '}
-              <Link href="/register" className="text-primary hover:underline">Sign up</Link>
+              <Link href="/register" className="text-primary hover:underline">
+                Sign up
+              </Link>
             </div>
           </CardContent>
         </Card>

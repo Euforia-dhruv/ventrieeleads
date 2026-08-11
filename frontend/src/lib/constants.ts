@@ -9,13 +9,34 @@ export const POPULAR_LOCATIONS = [
   { name: 'Mumbai', country: 'India', areas: ['Bandra', 'Andheri', 'Lower Parel'] },
 ];
 
-export const UAE_EMIRATES = POPULAR_LOCATIONS.filter(l => l.country === 'UAE');
+export const UAE_EMIRATES = POPULAR_LOCATIONS.filter((l) => l.country === 'UAE');
 
 export const INDUSTRIES = [
-  'Real Estate', 'Technology', 'Healthcare', 'Finance', 'Education',
-  'Hospitality', 'Retail', 'Manufacturing', 'Construction', 'Automotive',
-  'Food & Beverage', 'Fashion', 'Beauty & Wellness', 'Travel & Tourism',
-  'Logistics', 'Marketing & Advertising', 'Legal', 'Consulting',
-  'E-commerce', 'SaaS', 'Media & Entertainment', 'Agriculture',
-  'Energy', 'Telecommunications', 'Insurance', 'Sports & Fitness', 'Other'
+  'Real Estate',
+  'Technology',
+  'Healthcare',
+  'Finance',
+  'Education',
+  'Hospitality',
+  'Retail',
+  'Manufacturing',
+  'Construction',
+  'Automotive',
+  'Food & Beverage',
+  'Fashion',
+  'Beauty & Wellness',
+  'Travel & Tourism',
+  'Logistics',
+  'Marketing & Advertising',
+  'Legal',
+  'Consulting',
+  'E-commerce',
+  'SaaS',
+  'Media & Entertainment',
+  'Agriculture',
+  'Energy',
+  'Telecommunications',
+  'Insurance',
+  'Sports & Fitness',
+  'Other',
 ];

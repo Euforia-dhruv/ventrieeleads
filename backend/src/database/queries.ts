@@ -1,14 +1,17 @@
 import { Pool } from 'pg';
 import { Lead } from './models';
 
-export async function getLeads(pool: Pool, filters?: {
-  status?: string;
-  city?: string;
-  industry?: string;
-  minScore?: number;
-  maxScore?: number;
-  source?: string;
-}): Promise<Lead[]> {
+export async function getLeads(
+  pool: Pool,
+  filters?: {
+    status?: string;
+    city?: string;
+    industry?: string;
+    minScore?: number;
+    maxScore?: number;
+    source?: string;
+  },
+): Promise<Lead[]> {
   const client = await pool.connect();
   try {
     let query = 'SELECT * FROM leads WHERE is_deleted = false';
@@ -78,13 +81,15 @@ export async function getLeadStats(pool: Pool): Promise<{
   const client = await pool.connect();
   try {
     const total = await client.query('SELECT COUNT(*) FROM leads WHERE is_deleted = false');
-    const byStatus = await client.query('SELECT status, COUNT(*) as count FROM leads WHERE is_deleted = false GROUP BY status');
+    const byStatus = await client.query(
+      'SELECT status, COUNT(*) as count FROM leads WHERE is_deleted = false GROUP BY status',
+    );
     const avgScore = await client.query('SELECT AVG(score) as avg FROM leads WHERE is_deleted = false');
 
     return {
       total: parseInt(total.rows[0].count),
       byStatus: Object.fromEntries(byStatus.rows.map((r: any) => [r.status, parseInt(r.count)])),
-      avgScore: parseFloat(avgScore.rows[0].avg || '0')
+      avgScore: parseFloat(avgScore.rows[0].avg || '0'),
     };
   } finally {
     client.release();

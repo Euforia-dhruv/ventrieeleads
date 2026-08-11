@@ -158,6 +158,85 @@ class TaskHandler(BaseHTTPRequestHandler):
                 kwargs = {"query": query_text}
                 queue = "search"
 
+            elif path == "/outreach":
+                company_id = data.get("company_id")
+                channel = data.get("channel", "cold_email")
+                if not company_id:
+                    send_json(self, 400, {"error": "company_id is required", "status": "failed"})
+                    return
+                try:
+                    from worker.models.database import get_db_context
+                    from worker.models import Company, Website, Audit, Technology, Lead
+                    from worker.services.sales_assistant import sales_assistant
+                    import asyncio
+
+                    with get_db_context() as db:
+                        company = db.query(Company).filter(Company.id == company_id).first()
+                        if not company:
+                            send_json(self, 404, {"error": "Company not found", "status": "failed"})
+                            return
+
+                        website = db.query(Website).filter(Website.company_id == company_id).first()
+                        audit = db.query(Audit).filter(Audit.website_id == website.id).first() if website else None
+                        lead = db.query(Lead).filter(Lead.company_id == company_id).first()
+
+                        issues = []
+                        if audit:
+                            raw_issues = audit.weaknesses or []
+                            issues = [i if isinstance(i, str) else i.get("title", str(i)) for i in raw_issues[:5]]
+                        if not issues:
+                            issues = ["outdated website", "poor online presence"]
+
+                        company_data = {
+                            "name": company.name,
+                            "industry": company.industry or "",
+                            "city": company.city or "",
+                            "website": company.website or "",
+                            "phone": company.phone or "",
+                            "email": company.email or "",
+                            "rating": company.rating or 0,
+                            "review_count": company.review_count or 0,
+                        }
+
+                    if channel == "cold_email":
+                        result = asyncio.run(sales_assistant.generate_cold_email(
+                            company_name=company_data["name"],
+                            industry=company_data["industry"],
+                            issues=issues,
+                        ))
+                    elif channel == "linkedin":
+                        result = asyncio.run(sales_assistant.generate_linkedin_message(
+                            company_name=company_data["name"],
+                            industry=company_data["industry"],
+                            issues=issues,
+                        ))
+                    elif channel == "whatsapp":
+                        msg = asyncio.run(sales_assistant.generate_whatsapp_message(
+                            company_name=company_data["name"],
+                            industry=company_data["industry"],
+                            issues=issues,
+                        ))
+                        result = {"message": msg}
+                    elif channel == "instagram":
+                        msg = asyncio.run(sales_assistant.generate_whatsapp_message(
+                            company_name=company_data["name"],
+                            industry=company_data["industry"],
+                            issues=issues,
+                        ))
+                        result = {"message": msg}
+                    else:
+                        result = {"error": f"Unknown channel: {channel}"}
+
+                    result["company"] = company_data
+                    result["channel"] = channel
+                    result["issues_used"] = issues
+                    send_json(self, 200, {"status": "ok", "data": result})
+
+                except Exception as e:
+                    logger.error(f"Outreach generation failed: {e}", exc_info=True)
+                    send_json(self, 500, {"error": str(e), "status": "failed"})
+                return
+
             elif path == "/enqueue":
                 task_name = data.get("task")
                 if not task_name:

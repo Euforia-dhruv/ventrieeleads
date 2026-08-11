@@ -1,6 +1,5 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
 import { getPool } from '../database/connection';
 import { logger } from '../core/logger';
 import { AuthRequest } from '../middleware/auth';
@@ -23,7 +22,7 @@ export async function listApiKeys(req: AuthRequest, res: Response): Promise<void
     const result = await pool.query(
       `SELECT id, name, key_prefix, type, scopes, rate_limit, expires_at, last_used_at, is_active, created_at
        FROM api_keys WHERE workspace_id = $1 AND user_id = $2 ORDER BY created_at DESC`,
-      [req.workspaceId, req.user.id]
+      [req.workspaceId, req.user.id],
     );
 
     res.json({ success: true, data: result.rows });
@@ -60,16 +59,16 @@ export async function createApiKey(req: AuthRequest, res: Response): Promise<voi
       `INSERT INTO api_keys (workspace_id, user_id, name, key_prefix, key_hash, type, scopes, rate_limit, expires_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING id, name, key_prefix, type, scopes, rate_limit, expires_at, is_active, created_at`,
-      [req.workspaceId, req.user.id, name, prefix, hash, type, JSON.stringify(scopes), rate_limit, expires_at || null]
+      [req.workspaceId, req.user.id, name, prefix, hash, type, JSON.stringify(scopes), rate_limit, expires_at || null],
     );
 
     res.status(201).json({
       success: true,
       data: {
         ...result.rows[0],
-        key
+        key,
       },
-      message: 'Save this API key - it will not be shown again'
+      message: 'Save this API key - it will not be shown again',
     });
   } catch (error) {
     logger.error('Create API key error:', error);
@@ -89,7 +88,7 @@ export async function revokeApiKey(req: AuthRequest, res: Response): Promise<voi
 
     const result = await pool.query(
       `UPDATE api_keys SET is_active = false, updated_at = NOW() WHERE id = $1 AND workspace_id = $2 AND user_id = $3 RETURNING id`,
-      [id, req.workspaceId, req.user.id]
+      [id, req.workspaceId, req.user.id],
     );
 
     if (result.rows.length === 0) {
@@ -116,7 +115,7 @@ export async function deleteApiKey(req: AuthRequest, res: Response): Promise<voi
 
     const result = await pool.query(
       `DELETE FROM api_keys WHERE id = $1 AND workspace_id = $2 AND user_id = $3 RETURNING id`,
-      [id, req.workspaceId, req.user.id]
+      [id, req.workspaceId, req.user.id],
     );
 
     if (result.rows.length === 0) {
@@ -143,7 +142,7 @@ export async function getApiKeyUsage(req: AuthRequest, res: Response): Promise<v
 
     const result = await pool.query(
       `SELECT id, name, key_prefix, type, last_used_at, created_at FROM api_keys WHERE id = $1 AND workspace_id = $2`,
-      [id, req.workspaceId]
+      [id, req.workspaceId],
     );
 
     if (result.rows.length === 0) {

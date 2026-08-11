@@ -1,4 +1,4 @@
-"""Scrape task - extracts data from company websites."""
+"""Scrape task — extracts data from company websites."""
 import logging
 from datetime import datetime
 from worker.celery_app import app
@@ -12,15 +12,26 @@ logger = logging.getLogger(__name__)
 
 
 @app.task(bind=True, name="worker.tasks.scrape.scrape_company")
-def scrape_company(self, company_id: str):
-    """Scrape a company website for details."""
+def scrape_company(self, company_id_or_result, company_id: str = None):
+    """Scrape a company website for details.
+
+    Accepts either:
+      - scrape_company("company-id")  (direct call)
+      - scrape_company(result, "company-id")  (from Celery chain — ignores result)
+
+    Returns company_id so it can be chained with audit.
+    """
+    # Handle Celery chain calling convention
+    if company_id is None:
+        company_id = str(company_id_or_result)
+
     logger.info(f"Scraping company: {company_id}")
 
     with get_db_context() as db:
         company = db.query(Company).filter(Company.id == company_id).first()
         if not company or not company.website:
             logger.warning(f"Company not found or no website: {company_id}")
-            return
+            return company_id
 
         try:
             import asyncio
@@ -46,6 +57,7 @@ def scrape_company(self, company_id: str):
             website.facebook = website_data.get("facebook", "")
             website.linkedin = website_data.get("linkedin", "")
             website.youtube = website_data.get("youtube", "")
+            website.tiktok = website_data.get("tiktok", "")
             website.contact_page = website_data.get("contact_page", "")
             website.about_page = website_data.get("about_page", "")
             website.services = website_data.get("services", [])
@@ -108,7 +120,9 @@ def scrape_company(self, company_id: str):
         except Exception as e:
             logger.error(f"Scraping failed for {company.name}: {e}")
             db.rollback()
-            raise
+
+    # Always return company_id for chaining
+    return company_id
 
 
 @app.task(bind=True, name="worker.tasks.scrape.crawl_company")

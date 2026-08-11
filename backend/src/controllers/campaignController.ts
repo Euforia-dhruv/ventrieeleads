@@ -21,15 +21,34 @@ export async function listCampaigns(req: Request, res: Response): Promise<void> 
 export async function createCampaign(req: Request, res: Response): Promise<void> {
   try {
     const pool = getPool();
-    const { name, description, status = 'active', industry_filter = [], location_filter = [],
-            lead_score_min = 0, lead_score_max = 100, notes } = req.body;
-    const result = await pool.query(`
+    const {
+      name,
+      description,
+      status = 'active',
+      industry_filter = [],
+      location_filter = [],
+      lead_score_min = 0,
+      lead_score_max = 100,
+      notes,
+    } = req.body;
+    const result = await pool.query(
+      `
       INSERT INTO campaigns (id, name, description, status, industry_filter, location_filter,
         lead_score_min, lead_score_max, notes)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *
-    `, [uuidv4(), name, description, status,
-        JSON.stringify(industry_filter), JSON.stringify(location_filter),
-        lead_score_min, lead_score_max, notes]);
+    `,
+      [
+        uuidv4(),
+        name,
+        description,
+        status,
+        JSON.stringify(industry_filter),
+        JSON.stringify(location_filter),
+        lead_score_min,
+        lead_score_max,
+        notes,
+      ],
+    );
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error) {
     logger.error('Error creating campaign:', error);
@@ -70,7 +89,8 @@ export async function updateCampaign(req: Request, res: Response): Promise<void>
     values.push(id);
 
     const result = await pool.query(
-      `UPDATE campaigns SET ${sets.join(', ')} WHERE id = $${idx} AND is_deleted = false RETURNING *`, values
+      `UPDATE campaigns SET ${sets.join(', ')} WHERE id = $${idx} AND is_deleted = false RETURNING *`,
+      values,
     );
     if (result.rows.length === 0) {
       res.status(404).json({ success: false, message: 'Campaign not found' });
@@ -100,11 +120,14 @@ export async function addLeadToCampaign(req: Request, res: Response): Promise<vo
     const { id } = req.params;
     const { lead_id, notes } = req.body;
 
-    await pool.query(`
+    await pool.query(
+      `
       INSERT INTO campaign_leads (id, campaign_id, lead_id, notes)
       VALUES ($1, $2, $3, $4)
       ON CONFLICT (campaign_id, lead_id) DO NOTHING
-    `, [uuidv4(), id, lead_id, notes || null]);
+    `,
+      [uuidv4(), id, lead_id, notes || null],
+    );
 
     res.status(201).json({ success: true, message: 'Lead added to campaign' });
   } catch (error) {
@@ -129,7 +152,8 @@ export async function getCampaignLeads(req: Request, res: Response): Promise<voi
   try {
     const pool = getPool();
     const { id } = req.params;
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT cl.*, l.score, l.score_label, l.status as lead_status,
              c.name as company_name, c.website, c.industry, c.city
       FROM campaign_leads cl
@@ -137,7 +161,9 @@ export async function getCampaignLeads(req: Request, res: Response): Promise<voi
       JOIN companies c ON l.company_id = c.id
       WHERE cl.campaign_id = $1
       ORDER BY cl.added_at DESC
-    `, [id]);
+    `,
+      [id],
+    );
     res.json({ success: true, data: result.rows });
   } catch (error) {
     logger.error('Error fetching campaign leads:', error);

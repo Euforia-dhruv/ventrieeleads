@@ -41,9 +41,7 @@ function CallbackHandler() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="text-center max-w-md">
-          <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-sm mb-4">
-            {error}
-          </div>
+          <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-sm mb-4">{error}</div>
           <a href="/login" className="text-primary hover:underline text-sm">
             Return to login
           </a>
@@ -64,11 +62,13 @@ function CallbackHandler() {
 
 export default function AuthCallbackPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      }
+    >
       <CallbackHandler />
     </Suspense>
   );

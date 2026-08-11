@@ -26,7 +26,14 @@ class SalesAssistant:
         issues_text = ", ".join(issues[:5]) if issues else "outdated website, poor online presence"
         recipient = contact_name or "there"
 
-        prompt = f"""Generate a professional cold outreach email for {AGENCY_NAME} ({AGENCY_URL}).
+        fallback = {
+            "subject": f"Quick question about {company_name}'s website",
+            "body": f"Hi {recipient},\n\nI noticed {company_name} might benefit from a website refresh. We help businesses like yours improve their online presence and convert more visitors into customers.\n\nWould you be open to a quick 15-minute call to discuss how we can help?\n\nBest regards,\n{AGENCY_NAME}\n{AGENCY_URL}",
+            "cta": "Book a free 15-minute audit call"
+        }
+
+        try:
+            prompt = f"""Generate a professional cold outreach email for {AGENCY_NAME} ({AGENCY_URL}).
 
 Target: {company_name} ({industry})
 Problems detected: {issues_text}
@@ -45,12 +52,13 @@ Requirements:
 Return as JSON:
 {{"subject": "...", "body": "...", "cta": "..."}}"""
 
-        result = await ai_client.generate_json(prompt)
-        return result or {
-            "subject": f"Quick question about {company_name}'s website",
-            "body": f"Hi {recipient},\n\nI noticed {company_name} might benefit from a website refresh. We help businesses like yours improve their online presence and convert more visitors into customers.\n\nWould you be open to a quick 15-minute call to discuss how we can help?\n\nBest regards,\n{AGENCY_NAME}\n{AGENCY_URL}",
-            "cta": "Book a free 15-minute audit call"
-        }
+            result = await ai_client.generate_json(prompt)
+            if result and isinstance(result, dict) and not result.get("parse_error"):
+                return result
+        except Exception as e:
+            logger.warning(f"AI cold email generation failed, using fallback: {e}")
+
+        return fallback
 
     async def generate_linkedin_message(
         self,
@@ -63,7 +71,13 @@ Return as JSON:
         issues_text = ", ".join(issues[:3]) if issues else "website improvements"
         recipient = contact_name or "there"
 
-        prompt = f"""Generate LinkedIn outreach messages for {AGENCY_NAME}.
+        fallback = {
+            "connection_request": f"Hi {recipient}, I help {industry} businesses improve their digital presence. I noticed some opportunities for {company_name} and wanted to connect.",
+            "follow_up": f"Thanks for connecting, {recipient}! I took a quick look at {company_name}'s online presence and spotted a few ways to boost your conversions. Would you like me to share a quick analysis?"
+        }
+
+        try:
+            prompt = f"""Generate LinkedIn outreach messages for {AGENCY_NAME}.
 
 Target: {company_name} ({industry})
 Issues: {issues_text}
@@ -81,11 +95,13 @@ Requirements:
 Return as JSON:
 {{"connection_request": "...", "follow_up": "..."}}"""
 
-        result = await ai_client.generate_json(prompt)
-        return result or {
-            "connection_request": f"Hi {recipient}, I help {industry} businesses improve their digital presence. I noticed some opportunities for {company_name} and wanted to connect.",
-            "follow_up": f"Thanks for connecting, {recipient}! I took a quick look at {company_name}'s online presence and spotted a few ways to boost your conversions. Would you like me to share a quick analysis?"
-        }
+            result = await ai_client.generate_json(prompt)
+            if result and isinstance(result, dict) and not result.get("parse_error"):
+                return result
+        except Exception as e:
+            logger.warning(f"AI LinkedIn generation failed, using fallback: {e}")
+
+        return fallback
 
     async def generate_whatsapp_message(
         self,
@@ -96,7 +112,10 @@ Return as JSON:
         """Generate a WhatsApp outreach message."""
         issues_text = ", ".join(issues[:2]) if issues else "website"
 
-        prompt = f"""Generate a short WhatsApp message for {AGENCY_NAME} outreach.
+        fallback = f"Hi! I noticed {company_name}'s {issues_text} could use some improvements. We recently helped a similar {industry} business increase their leads by 3x. Would you like me to share a quick audit?"
+
+        try:
+            prompt = f"""Generate a short WhatsApp message for {AGENCY_NAME} outreach.
 
 Target: {company_name} ({industry})
 Issue: {issues_text}
@@ -110,8 +129,13 @@ Requirements:
 
 Return just the message text, no JSON."""
 
-        result = await ai_client.generate(prompt)
-        return result or f"Hi! I noticed {company_name}'s {issues_text} could use some improvements. We recently helped a similar {industry} business increase their leads by 3x. Would you like me to share a quick audit?"
+            result = await ai_client.generate(prompt)
+            if result and isinstance(result, str):
+                return result
+        except Exception as e:
+            logger.warning(f"AI WhatsApp generation failed, using fallback: {e}")
+
+        return fallback
 
     async def generate_audit_summary(
         self,

@@ -7,6 +7,8 @@ import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
+import { Pool } from 'pg';
+import { createClient } from 'redis';
 import { logger } from './core/logger';
 import { errorHandler } from './core/errorHandler';
 import { connectToDatabase } from './database/connection';
@@ -14,8 +16,18 @@ import { redisClient } from './database/redis';
 import { minioClient } from './database/minio';
 import { setupRoutes } from './routes';
 import { wsManager } from './core/websocket';
-import { securityMiddleware, xssProtectionHeaders, sqlInjectionProtection, requestSanitization } from './middleware/security';
-import { tracingMiddleware, requestMetricsMiddleware, prometheusEndpoint, startMetricsCollection } from './middleware/observability';
+import {
+  securityMiddleware,
+  xssProtectionHeaders,
+  sqlInjectionProtection,
+  requestSanitization,
+} from './middleware/security';
+import {
+  tracingMiddleware,
+  requestMetricsMiddleware,
+  prometheusEndpoint,
+  startMetricsCollection,
+} from './middleware/observability';
 
 dotenv.config();
 
@@ -25,25 +37,29 @@ const PORT = process.env.PORT || 8000;
 
 app.set('trust proxy', 1);
 
-app.use(helmet({
-  contentSecurityPolicy: false,
-  crossOriginEmbedderPolicy: false
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  }),
+);
 
-app.use(cors({
-  origin: process.env.CORS_ORIGINS?.split(',') || ['https://ventrieeleads.qd.je'],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-API-Key'],
-  maxAge: 86400
-}));
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGINS?.split(',') || ['https://ventrieeleads.qd.je'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-API-Key'],
+    maxAge: 86400,
+  }),
+);
 
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: parseInt(process.env.MAX_CONCURRENT_JOBS || '100'),
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, message: 'Too many requests, please try again later.' }
+  message: { success: false, message: 'Too many requests, please try again later.' },
 });
 
 const searchLimiter = rateLimit({
@@ -51,7 +67,7 @@ const searchLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, message: 'Search rate limit exceeded.' }
+  message: { success: false, message: 'Search rate limit exceeded.' },
 });
 
 const auditLimiter = rateLimit({
@@ -59,7 +75,7 @@ const auditLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, message: 'Audit rate limit exceeded.' }
+  message: { success: false, message: 'Audit rate limit exceeded.' },
 });
 
 app.use('/api/', generalLimiter);
@@ -82,7 +98,7 @@ app.use(tracingMiddleware);
 app.use(requestMetricsMiddleware);
 
 app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
-  const requestId = req.headers['x-request-id'] as string || crypto.randomUUID();
+  const requestId = (req.headers['x-request-id'] as string) || crypto.randomUUID();
   req.headers['x-request-id'] = requestId;
   res.setHeader('X-Request-ID', requestId);
 
@@ -96,7 +112,7 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
       status: res.statusCode,
       duration: `${duration}ms`,
       ip: req.ip,
-      userAgent: req.get('User-Agent')
+      userAgent: req.get('User-Agent'),
     };
 
     if (duration > 5000) {
@@ -117,7 +133,6 @@ app.get('/health', async (req, res) => {
   const checks: Record<string, string> = {};
 
   try {
-    const { Pool } = require('pg');
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     await pool.query('SELECT 1');
     checks.database = 'healthy';
@@ -127,8 +142,7 @@ app.get('/health', async (req, res) => {
   }
 
   try {
-    const redis = require('redis');
-    const client = redis.createClient({ url: process.env.REDIS_URL });
+    const client = createClient({ url: process.env.REDIS_URL });
     await client.connect();
     await client.ping();
     checks.redis = 'healthy';
@@ -139,14 +153,14 @@ app.get('/health', async (req, res) => {
 
   checks.websocket = 'healthy';
 
-  const allHealthy = Object.values(checks).every(s => s === 'healthy');
+  const allHealthy = Object.values(checks).every((s) => s === 'healthy');
 
   res.status(allHealthy ? 200 : 503).json({
     status: allHealthy ? 'healthy' : 'degraded',
     timestamp: new Date().toISOString(),
     version: '3.0.0',
     checks,
-    websocketClients: wsManager.getClientCount()
+    websocketClients: wsManager.getClientCount(),
   });
 });
 

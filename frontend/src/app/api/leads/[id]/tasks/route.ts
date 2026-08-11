@@ -8,7 +8,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const res = await fetch(`${API_URL}/api/leads/${id}/tasks`);
     const data = await res.json();
     return NextResponse.json(data);
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, data: [] }, { status: 500 });
   }
 }
@@ -18,11 +18,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { id } = await params;
     const body = await request.json();
     const res = await fetch(`${API_URL}/api/leads/${id}/tasks`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, message: 'Failed to create task' }, { status: 500 });
   }
 }

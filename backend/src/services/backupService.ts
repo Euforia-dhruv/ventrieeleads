@@ -44,23 +44,24 @@ class BackupService {
     backupType: string = 'full',
     triggeredBy?: string,
     triggeredByEmail?: string,
-    description?: string
+    description?: string,
   ): Promise<BackupRecord> {
     const pool = getPool();
     const startTime = Date.now();
 
-    const lockAcquired = await redisClient.getClient().set(
-      REDIS_BACKUP_LOCK, '1', { NX: true, EX: BACKUP_LOCK_TTL }
-    );
+    const lockAcquired = await redisClient.getClient().set(REDIS_BACKUP_LOCK, '1', { NX: true, EX: BACKUP_LOCK_TTL });
     if (!lockAcquired) {
       throw new Error('Another backup is already in progress');
     }
 
     try {
-      const backupResult = await pool.query(
-        `SELECT create_backup_record($1, $2, $3, $4, $5) as id`,
-        [name, backupType, triggeredBy || null, triggeredByEmail || null, description || null]
-      );
+      const backupResult = await pool.query(`SELECT create_backup_record($1, $2, $3, $4, $5) as id`, [
+        name,
+        backupType,
+        triggeredBy || null,
+        triggeredByEmail || null,
+        description || null,
+      ]);
       const backupId = backupResult.rows[0].id;
 
       const tablesToBackup = await this.getBackupTables(backupType);
@@ -78,18 +79,24 @@ class BackupService {
       const storagePath = `backups/${fileName}`;
       const estimatedSize = totalRows * 256;
 
-      await pool.query(
-        `SELECT complete_backup_record($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [
-          backupId, storagePath, fileName, estimatedSize,
-          checksum, tablesToBackup.length,
-          JSON.stringify(rowCountMap), durationMs
-        ]
-      );
+      await pool.query(`SELECT complete_backup_record($1, $2, $3, $4, $5, $6, $7, $8)`, [
+        backupId,
+        storagePath,
+        fileName,
+        estimatedSize,
+        checksum,
+        tablesToBackup.length,
+        JSON.stringify(rowCountMap),
+        durationMs,
+      ]);
 
       logger.info('Backup created', {
-        backupId, name, type: backupType,
-        tables: tablesToBackup.length, totalRows, durationMs
+        backupId,
+        name,
+        type: backupType,
+        tables: tablesToBackup.length,
+        totalRows,
+        durationMs,
       });
 
       const record = await this.getBackupById(backupId);
@@ -101,13 +108,10 @@ class BackupService {
       logger.error('Backup creation failed:', error);
       try {
         const failedResult = await pool.query(
-          `SELECT id FROM backups WHERE status = 'running' ORDER BY created_at DESC LIMIT 1`
+          `SELECT id FROM backups WHERE status = 'running' ORDER BY created_at DESC LIMIT 1`,
         );
         if (failedResult.rows.length > 0) {
-          await pool.query(
-            `SELECT fail_backup_record($1, $2)`,
-            [failedResult.rows[0].id, error.message]
-          );
+          await pool.query(`SELECT fail_backup_record($1, $2)`, [failedResult.rows[0].id, error.message]);
         }
       } catch (innerError) {
         logger.error('Failed to mark backup as failed:', innerError);
@@ -170,16 +174,13 @@ class BackupService {
       total,
       page,
       limit,
-      pages: Math.ceil(total / limit)
+      pages: Math.ceil(total / limit),
     };
   }
 
   async getBackupById(id: string): Promise<BackupRecord | null> {
     const pool = getPool();
-    const result = await pool.query(
-      'SELECT * FROM backups WHERE id = $1 AND is_deleted = false',
-      [id]
-    );
+    const result = await pool.query('SELECT * FROM backups WHERE id = $1 AND is_deleted = false', [id]);
     if (result.rows.length === 0) return null;
     return this.mapBackupRecord(result.rows[0]);
   }
@@ -195,9 +196,9 @@ class BackupService {
       throw new Error(`Cannot restore backup with status: ${backup.status}`);
     }
 
-    const restoreLock = await redisClient.getClient().set(
-      'backup:restore_in_progress', '1', { NX: true, EX: BACKUP_LOCK_TTL }
-    );
+    const restoreLock = await redisClient
+      .getClient()
+      .set('backup:restore_in_progress', '1', { NX: true, EX: BACKUP_LOCK_TTL });
     if (!restoreLock) {
       throw new Error('Another restore operation is in progress');
     }
@@ -212,8 +213,8 @@ class BackupService {
           `Restore from ${backup.name}`,
           backupId,
           restoredBy,
-          `Restored from backup "${backup.name}" (${backup.file_name})`
-        ]
+          `Restored from backup "${backup.name}" (${backup.file_name})`,
+        ],
       );
 
       logger.info('Backup restored', { backupId, restoredBy, backupName: backup.name });
@@ -226,10 +227,7 @@ class BackupService {
 
   async cleanupOldBackups(maxBackups: number = 30): Promise<number> {
     const pool = getPool();
-    const result = await pool.query(
-      `SELECT cleanup_old_backups($1) as deleted`,
-      [maxBackups]
-    );
+    const result = await pool.query(`SELECT cleanup_old_backups($1) as deleted`, [maxBackups]);
     const deleted = parseInt(result.rows[0].deleted);
     if (deleted > 0) {
       logger.info('Old backups cleaned up', { deleted, maxBackups });
@@ -267,28 +265,59 @@ class BackupService {
       running: parseInt(row.running),
       totalSizeBytes: parseInt(row.total_size),
       oldestBackup: row.oldest,
-      newestBackup: row.newest
+      newestBackup: row.newest,
     };
   }
 
   private async getBackupTables(backupType: string): Promise<string[]> {
     const coreTables = [
-      'users', 'workspaces', 'companies', 'websites', 'contacts',
-      'technologies', 'screenshots', 'audits', 'leads', 'tags',
-      'activities', 'campaigns', 'email_sequences', 'search_jobs', 'search_results'
+      'users',
+      'workspaces',
+      'companies',
+      'websites',
+      'contacts',
+      'technologies',
+      'screenshots',
+      'audits',
+      'leads',
+      'tags',
+      'activities',
+      'campaigns',
+      'email_sequences',
+      'search_jobs',
+      'search_results',
     ];
 
     const extendedTables = [
       ...coreTables,
-      'audit_logs', 'notification_queue', 'notification_preferences',
-      'admin_settings', 'opportunities', 'proposals', 'reports',
-      'company_research', 'competitor_analyses', 'redesign_previews',
-      'monitoring_schedules', 'monitoring_snapshots', 'discovery_campaigns',
-      'campaign_jobs', 'locations', 'industries', 'provider_metrics',
-      'company_intelligence_scores', 'discovery_insights', 'benchmark_snapshots',
-      'executive_ai_reports', 'automation_rules', 'automation_executions',
-      'backups', 'data_retention_policies', 'soft_deleted_entities',
-      'encryption_keys', 'system_config'
+      'audit_logs',
+      'notification_queue',
+      'notification_preferences',
+      'admin_settings',
+      'opportunities',
+      'proposals',
+      'reports',
+      'company_research',
+      'competitor_analyses',
+      'redesign_previews',
+      'monitoring_schedules',
+      'monitoring_snapshots',
+      'discovery_campaigns',
+      'campaign_jobs',
+      'locations',
+      'industries',
+      'provider_metrics',
+      'company_intelligence_scores',
+      'discovery_insights',
+      'benchmark_snapshots',
+      'executive_ai_reports',
+      'automation_rules',
+      'automation_executions',
+      'backups',
+      'data_retention_policies',
+      'soft_deleted_entities',
+      'encryption_keys',
+      'system_config',
     ];
 
     if (backupType === 'full') {
@@ -315,15 +344,15 @@ class BackupService {
       compression: row.compression,
       encryption: row.encryption,
       table_count: parseInt(row.table_count) || 0,
-      row_counts: typeof row.row_counts === 'string' ? JSON.parse(row.row_counts) : (row.row_counts || {}),
+      row_counts: typeof row.row_counts === 'string' ? JSON.parse(row.row_counts) : row.row_counts || {},
       duration_ms: parseInt(row.duration_ms) || null,
       triggered_by: row.triggered_by,
       triggered_by_email: row.triggered_by_email,
       error_message: row.error_message,
-      metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata || {}),
+      metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata || {},
       expires_at: row.expires_at,
       created_at: row.created_at,
-      updated_at: row.updated_at
+      updated_at: row.updated_at,
     };
   }
 }

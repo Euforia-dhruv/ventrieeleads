@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { logger } from '../core/logger';
-import { getPool } from '../database/connection';
 
 interface SearchResult {
   name: string;
@@ -33,19 +32,16 @@ class ScoutAgent {
     }
 
     try {
-      const response = await axios.get(
-        `https://maps.googleapis.com/maps/api/place/textsearch/json`,
-        {
-          params: {
-            query: `${config.query} ${config.location}`,
-            key: process.env.GOOGLE_MAPS_API_KEY,
-            region: config.country || 'AE',
-            language: 'en',
-            type: 'establishment'
-          },
-          timeout: 15000
-        }
-      );
+      const response = await axios.get(`https://maps.googleapis.com/maps/api/place/textsearch/json`, {
+        params: {
+          query: `${config.query} ${config.location}`,
+          key: process.env.GOOGLE_MAPS_API_KEY,
+          region: config.country || 'AE',
+          language: 'en',
+          type: 'establishment',
+        },
+        timeout: 15000,
+      });
 
       if (response.data.status !== 'OK') {
         logger.warn(`Google Maps API returned status: ${response.data.status}`);
@@ -60,7 +56,7 @@ class ScoutAgent {
         rating: place.rating || 0,
         reviews: place.user_ratings_total || 0,
         category: place.types?.[0] || config.industry,
-        location: config.location
+        location: config.location,
       }));
 
       logger.info(`ScoutAgent: Found ${results.length} results from Google Maps`);

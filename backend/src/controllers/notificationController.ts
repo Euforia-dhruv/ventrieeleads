@@ -14,7 +14,7 @@ export async function listNotifications(req: Request, res: Response): Promise<vo
     res.json({
       success: true,
       data: result.rows,
-      unread_count: parseInt(unreadCount.rows[0].count)
+      unread_count: parseInt(unreadCount.rows[0].count),
     });
   } catch (error) {
     logger.error('Error listing notifications:', error);

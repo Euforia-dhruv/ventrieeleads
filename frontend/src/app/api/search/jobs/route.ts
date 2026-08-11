@@ -10,10 +10,7 @@ export async function GET(request: NextRequest) {
     const res = await fetch(`${BACKEND_URL}/api/search/jobs?${query}`);
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch (error) {
-    return NextResponse.json(
-      { success: false, message: 'Failed to fetch jobs' },
-      { status: 500 }
-    );
+  } catch {
+    return NextResponse.json({ success: false, message: 'Failed to fetch jobs' }, { status: 500 });
   }
 }

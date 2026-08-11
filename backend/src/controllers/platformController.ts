@@ -14,7 +14,7 @@ export const generateProposal = async (req: Request, res: Response): Promise<voi
        LEFT JOIN websites w ON w.company_id = c.id
        LEFT JOIN audits a ON a.website_id = w.id
        WHERE c.id = $1`,
-      [company_id]
+      [company_id],
     );
     if (companyResult.rows.length === 0) {
       res.status(404).json({ success: false, message: 'Company not found' });
@@ -24,13 +24,13 @@ export const generateProposal = async (req: Request, res: Response): Promise<voi
 
     const researchResult = await pool.query(
       `SELECT * FROM company_research WHERE company_id = $1 AND is_deleted = false ORDER BY created_at DESC LIMIT 1`,
-      [company_id]
+      [company_id],
     );
     const research = researchResult.rows[0] || null;
 
     const competitorResult = await pool.query(
       `SELECT * FROM competitor_analyses WHERE company_id = $1 AND is_deleted = false ORDER BY created_at DESC LIMIT 5`,
-      [company_id]
+      [company_id],
     );
     const competitors = competitorResult.rows;
 
@@ -44,7 +44,7 @@ export const generateProposal = async (req: Request, res: Response): Promise<voi
     const proposalResult = await pool.query(
       `INSERT INTO proposals (company_id, title, status, services, generated_by_ai)
        VALUES ($1, $2, 'generating', $3, true) RETURNING id`,
-      [company_id, `Proposal for ${company.name}`, research?.recommended_services || []]
+      [company_id, `Proposal for ${company.name}`, research?.recommended_services || []],
     );
 
     res.json({ success: true, data: { proposal_id: proposalResult.rows[0].id, task_id: result.task_id } });
@@ -62,7 +62,7 @@ export const listProposals = async (req: Request, res: Response): Promise<void> 
        FROM proposals p
        LEFT JOIN companies c ON c.id = p.company_id
        WHERE p.is_deleted = false
-       ORDER BY p.created_at DESC LIMIT 100`
+       ORDER BY p.created_at DESC LIMIT 100`,
     );
     res.json({ success: true, data: result.rows });
   } catch (error) {
@@ -80,7 +80,7 @@ export const getProposal = async (req: Request, res: Response): Promise<void> =>
        FROM proposals p
        LEFT JOIN companies c ON c.id = p.company_id
        WHERE p.id = $1 AND p.is_deleted = false`,
-      [id]
+      [id],
     );
     if (result.rows.length === 0) {
       res.status(404).json({ success: false, message: 'Proposal not found' });
@@ -103,7 +103,7 @@ export const generateCopy = async (req: Request, res: Response): Promise<void> =
        LEFT JOIN websites w ON w.company_id = c.id
        LEFT JOIN audits a ON a.website_id = w.id
        WHERE c.id = $1`,
-      [company_id]
+      [company_id],
     );
     if (companyResult.rows.length === 0) {
       res.status(404).json({ success: false, message: 'Company not found' });
@@ -113,7 +113,7 @@ export const generateCopy = async (req: Request, res: Response): Promise<void> =
 
     const researchResult = await pool.query(
       `SELECT * FROM company_research WHERE company_id = $1 AND is_deleted = false ORDER BY created_at DESC LIMIT 1`,
-      [company_id]
+      [company_id],
     );
     const research = researchResult.rows[0] || null;
 
@@ -121,14 +121,18 @@ export const generateCopy = async (req: Request, res: Response): Promise<void> =
       success: true,
       data: {
         company: { name: company.name, industry: company.industry, city: company.city, website: company.website },
-        research: research ? {
-          pain_points: research.likely_pain_points,
-          talking_points: research.sales_talking_points,
-          recommended_services: research.recommended_services,
-        } : null,
-        type, tone, context,
-        message: `Copy generation queued for ${company.name}. Use the AI client to generate ${type} content with ${tone} tone.`
-      }
+        research: research
+          ? {
+              pain_points: research.likely_pain_points,
+              talking_points: research.sales_talking_points,
+              recommended_services: research.recommended_services,
+            }
+          : null,
+        type,
+        tone,
+        context,
+        message: `Copy generation queued for ${company.name}. Use the AI client to generate ${type} content with ${tone} tone.`,
+      },
     });
   } catch (error) {
     logger.error('Failed to generate copy', error);
@@ -147,7 +151,7 @@ export const generateRedesign = async (req: Request, res: Response): Promise<voi
        LEFT JOIN websites w ON w.company_id = c.id
        LEFT JOIN audits a ON a.website_id = w.id
        WHERE c.id = $1`,
-      [company_id]
+      [company_id],
     );
     if (companyResult.rows.length === 0) {
       res.status(404).json({ success: false, message: 'Company not found' });
@@ -157,15 +161,15 @@ export const generateRedesign = async (req: Request, res: Response): Promise<voi
     const previewResult = await pool.query(
       `INSERT INTO redesign_previews (company_id, redesign_style, color_scheme, changes_made)
        VALUES ($1, $2, $3, $4) RETURNING id`,
-      [company_id, style || 'modern', JSON.stringify(color_palette || {}), JSON.stringify([])]
+      [company_id, style || 'modern', JSON.stringify(color_palette || {}), JSON.stringify([])],
     );
 
     res.json({
       success: true,
       data: {
         preview_id: previewResult.rows[0].id,
-        company: companyResult.rows[0]
-      }
+        company: companyResult.rows[0],
+      },
     });
   } catch (error) {
     logger.error('Failed to generate redesign', error);
@@ -179,18 +183,27 @@ export const getCompanyTimeline = async (req: Request, res: Response): Promise<v
     const pool = getPool();
 
     const [research, audits, monitoring, proposals] = await Promise.all([
-      pool.query(`SELECT * FROM company_research WHERE company_id = $1 AND is_deleted = false ORDER BY created_at DESC`, [id]),
-      pool.query(`SELECT a.* FROM audits a JOIN websites w ON a.website_id = w.id WHERE w.company_id = $1 AND a.is_deleted = false ORDER BY a.created_at DESC`, [id]),
-      pool.query(`SELECT * FROM monitoring_snapshots WHERE company_id = $1 AND changes_detected != '[]' ORDER BY created_at DESC LIMIT 20`, [id]),
+      pool.query(
+        `SELECT * FROM company_research WHERE company_id = $1 AND is_deleted = false ORDER BY created_at DESC`,
+        [id],
+      ),
+      pool.query(
+        `SELECT a.* FROM audits a JOIN websites w ON a.website_id = w.id WHERE w.company_id = $1 AND a.is_deleted = false ORDER BY a.created_at DESC`,
+        [id],
+      ),
+      pool.query(
+        `SELECT * FROM monitoring_snapshots WHERE company_id = $1 AND changes_detected != '[]' ORDER BY created_at DESC LIMIT 20`,
+        [id],
+      ),
       pool.query(`SELECT * FROM proposals WHERE company_id = $1 AND is_deleted = false ORDER BY created_at DESC`, [id]),
     ]);
 
     const events: any[] = [];
 
-    research.rows.forEach(r => events.push({ type: 'research', date: r.created_at, data: r }));
-    audits.rows.forEach(a => events.push({ type: 'audit', date: a.created_at, data: a }));
-    monitoring.rows.forEach(m => events.push({ type: 'monitoring', date: m.created_at, data: m }));
-    proposals.rows.forEach(p => events.push({ type: 'proposal', date: p.created_at, data: p }));
+    research.rows.forEach((r) => events.push({ type: 'research', date: r.created_at, data: r }));
+    audits.rows.forEach((a) => events.push({ type: 'audit', date: a.created_at, data: a }));
+    monitoring.rows.forEach((m) => events.push({ type: 'monitoring', date: m.created_at, data: m }));
+    proposals.rows.forEach((p) => events.push({ type: 'proposal', date: p.created_at, data: p }));
 
     events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -214,7 +227,7 @@ export const getSalesPlaybook = async (req: Request, res: Response): Promise<voi
        LEFT JOIN websites w ON w.company_id = c.id
        LEFT JOIN audits a ON a.website_id = w.id
        WHERE c.id = $1`,
-      [id]
+      [id],
     );
     if (companyResult.rows.length === 0) {
       res.status(404).json({ success: false, message: 'Company not found' });
@@ -224,13 +237,13 @@ export const getSalesPlaybook = async (req: Request, res: Response): Promise<voi
 
     const researchResult = await pool.query(
       `SELECT * FROM company_research WHERE company_id = $1 AND is_deleted = false ORDER BY created_at DESC LIMIT 1`,
-      [id]
+      [id],
     );
     const research = researchResult.rows[0] || null;
 
     const opportunityResult = await pool.query(
       `SELECT o.* FROM opportunities o JOIN leads l ON o.lead_id = l.id WHERE l.company_id = $1 LIMIT 1`,
-      [id]
+      [id],
     );
     const opportunity = opportunityResult.rows[0] || null;
 
@@ -267,15 +280,17 @@ export const getSalesPlaybook = async (req: Request, res: Response): Promise<voi
         urgency,
         close_probability: closeProbability,
         pricing_range: opportunity ? { min: opportunity.total_min, max: opportunity.total_max } : null,
-        research: research ? {
-          pain_points: research.likely_pain_points,
-          talking_points: research.sales_talking_points,
-          recommended_services: research.recommended_services,
-          priority: research.priority,
-          estimated_budget: research.estimated_budget,
-        } : null,
+        research: research
+          ? {
+              pain_points: research.likely_pain_points,
+              talking_points: research.sales_talking_points,
+              recommended_services: research.recommended_services,
+              priority: research.priority,
+              estimated_budget: research.estimated_budget,
+            }
+          : null,
         recommended_first_message: `Hi, I noticed ${company.name} in ${company.city || 'your area'}. I specialize in helping ${company.industry || 'businesses'} improve their online presence. I noticed a few areas where your website could perform better...`,
-      }
+      },
     });
   } catch (error) {
     logger.error('Failed to get sales playbook', error);
@@ -287,13 +302,23 @@ export const getExecutiveStats = async (req: Request, res: Response): Promise<vo
   try {
     const pool = getPool();
     const [leads, companies, research, proposals, reports, monitoring, opportunities] = await Promise.all([
-      pool.query(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE score >= 70) as hot, COUNT(*) FILTER (WHERE status = 'Won') as won, AVG(score) as avg_score FROM leads WHERE is_deleted = false`),
-      pool.query(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE is_monitored = true) as monitored FROM companies WHERE is_deleted = false`),
+      pool.query(
+        `SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE score >= 70) as hot, COUNT(*) FILTER (WHERE status = 'Won') as won, AVG(score) as avg_score FROM leads WHERE is_deleted = false`,
+      ),
+      pool.query(
+        `SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE is_monitored = true) as monitored FROM companies WHERE is_deleted = false`,
+      ),
       pool.query(`SELECT COUNT(*) as total FROM company_research WHERE is_deleted = false`),
-      pool.query(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'sent') as sent, COUNT(*) FILTER (WHERE status = 'accepted') as accepted FROM proposals WHERE is_deleted = false`),
+      pool.query(
+        `SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'sent') as sent, COUNT(*) FILTER (WHERE status = 'accepted') as accepted FROM proposals WHERE is_deleted = false`,
+      ),
       pool.query(`SELECT COUNT(*) as total FROM reports WHERE is_deleted = false`),
-      pool.query(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE changes_detected != '[]') as with_changes FROM monitoring_snapshots`),
-      pool.query(`SELECT SUM(total_min) as pipeline_min, SUM(total_max) as pipeline_max, COUNT(*) as total FROM opportunities`),
+      pool.query(
+        `SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE changes_detected != '[]') as with_changes FROM monitoring_snapshots`,
+      ),
+      pool.query(
+        `SELECT SUM(total_min) as pipeline_min, SUM(total_max) as pipeline_max, COUNT(*) as total FROM opportunities`,
+      ),
     ]);
 
     res.json({
@@ -315,7 +340,7 @@ export const getExecutiveStats = async (req: Request, res: Response): Promise<vo
         pipeline_min: parseInt(opportunities.rows[0].pipeline_min) || 0,
         pipeline_max: parseInt(opportunities.rows[0].pipeline_max) || 0,
         total_opportunities: parseInt(opportunities.rows[0].total),
-      }
+      },
     });
   } catch (error) {
     logger.error('Failed to get executive stats', error);

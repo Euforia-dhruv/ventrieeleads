@@ -53,6 +53,7 @@ class ProviderRegistry:
         self._auto_discovered = False
         self._cache = _Cache(ttl_seconds=300)
         self._search_stats: Dict[str, Dict] = {}
+        self._provider_config: Dict[str, Dict] = {}
 
     def register(self, provider: BaseProvider) -> None:
         """Register a provider instance."""
@@ -62,6 +63,20 @@ class ProviderRegistry:
     def register_class(self, slug: str, cls: Type[BaseProvider]) -> None:
         """Register a provider class for lazy instantiation."""
         self._provider_classes[slug] = cls
+
+    def _instantiate(self, slug: str) -> Optional[BaseProvider]:
+        """Instantiate a provider class, merging any AdminSetting-backed config."""
+        cls = self._provider_classes.get(slug)
+        if not cls:
+            return None
+        if not self._provider_config:
+            self._provider_config = self.get_provider_config()
+        config = self._provider_config.get(slug, {}) or {}
+        try:
+            return cls(config)
+        except Exception as e:
+            logger.error(f"Failed to instantiate provider {slug}: {e}")
+            return None
 
     def auto_discover(self) -> None:
         """Auto-discover and register all providers in the providers package."""
@@ -96,8 +111,9 @@ class ProviderRegistry:
         if slug in self._providers:
             return self._providers[slug]
         if slug in self._provider_classes:
-            provider = self._provider_classes[slug]()
-            self._providers[slug] = provider
+            provider = self._instantiate(slug)
+            if provider:
+                self._providers[slug] = provider
             return provider
         return None
 
@@ -127,6 +143,30 @@ class ProviderRegistry:
             pass
         return ["google_maps"]
 
+    def get_provider_config(self) -> Dict[str, Dict]:
+        """Load per-provider config (API keys, options) from AdminSetting rows.
+
+        Keys under `provider_configs` (a dict of provider_slug -> config dict) are
+        merged into each provider's config at instantiation time so API keys and
+        options can be managed via the admin UI instead of env vars alone.
+        """
+        configs: Dict[str, Dict] = {}
+        try:
+            from worker.models.database import get_db_context
+            from worker.models import AdminSetting
+
+            with get_db_context() as db:
+                setting = db.query(AdminSetting).filter(
+                    AdminSetting.key == 'provider_configs'
+                ).first()
+                if setting and isinstance(setting.value, dict):
+                    for slug, cfg in setting.value.items():
+                        if isinstance(cfg, dict):
+                            configs[slug] = cfg
+        except Exception:
+            pass
+        return configs
+
     def set_enabled(self, slugs: List[str]) -> None:
         """Set which providers are enabled."""
         self._enabled_slugs = set(slugs)
@@ -148,7 +188,9 @@ class ProviderRegistry:
 
         for slug, cls in self._provider_classes.items():
             if slug not in self._providers:
-                self._providers[slug] = cls()
+                provider = self._instantiate(slug)
+                if provider:
+                    self._providers[slug] = provider
 
         init_tasks = []
         for slug, provider in self._providers.items():
@@ -169,7 +211,11 @@ class ProviderRegistry:
 
     def _get_cache_key(self, method: str, **kwargs) -> str:
         """Generate cache key for a search call."""
-        raw = f"{method}:{kwargs.get('query', '')}:{kwargs.get('location', '')}:{kwargs.get('max_results', 50)}"
+        lat = kwargs.get("lat")
+        lng = kwargs.get("lng")
+        radius = kwargs.get("radius_km")
+        coord = f":{lat}:{lng}:{radius}" if lat is not None and lng is not None else ""
+        raw = f"{method}:{kwargs.get('query', '')}:{kwargs.get('location', '')}:{kwargs.get('max_results', 50)}{coord}"
         return hashlib.md5(raw.encode()).hexdigest()
 
     async def search_single(
@@ -208,18 +254,34 @@ class ProviderRegistry:
             return []
 
         last_error = None
+        lat = kwargs.get("lat")
+        lng = kwargs.get("lng")
+        radius_km = kwargs.get("radius_km", 10.0)
+        use_map = lat is not None and lng is not None and provider.supports_map_search
+
         for attempt in range(retries + 1):
             try:
                 start = time.time()
                 provider._track_request()
-                results = await provider.search(
-                    query=query,
-                    location=location,
-                    max_results=max_results,
-                    min_rating=min_rating,
-                    min_reviews=min_reviews,
-                    **kwargs
-                )
+                if use_map:
+                    results = await provider.search_by_map(
+                        query=query,
+                        lat=float(lat),
+                        lng=float(lng),
+                        radius_km=float(radius_km),
+                        max_results=max_results,
+                        min_rating=min_rating,
+                        min_reviews=min_reviews,
+                    )
+                else:
+                    results = await provider.search(
+                        query=query,
+                        location=location,
+                        max_results=max_results,
+                        min_rating=min_rating,
+                        min_reviews=min_reviews,
+                        **kwargs
+                    )
                 latency = (time.time() - start) * 1000
                 provider._track_success(latency)
                 logger.info(f"Provider {provider_slug} returned {len(results)} results in {latency:.0f}ms")

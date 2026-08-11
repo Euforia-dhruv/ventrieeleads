@@ -32,11 +32,11 @@ export async function getAgent(req: Request, res: Response): Promise<void> {
     }
     const executions = await pool.query(
       'SELECT * FROM agent_executions WHERE agent_name = $1 ORDER BY created_at DESC LIMIT 20',
-      [name]
+      [name],
     );
     const memory = await pool.query(
       'SELECT * FROM agent_memory WHERE agent_name = $1 ORDER BY created_at DESC LIMIT 50',
-      [name]
+      [name],
     );
     res.json({
       success: true,
@@ -44,7 +44,7 @@ export async function getAgent(req: Request, res: Response): Promise<void> {
         ...state.rows[0],
         recent_executions: executions.rows,
         memory: memory.rows,
-      }
+      },
     });
   } catch (error) {
     logger.error('Error fetching agent:', error);
@@ -66,7 +66,7 @@ export async function runAgent(req: Request, res: Response): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ agent_name: name, context: req.body.context || {} }),
     });
-    const result = await response.json() as any;
+    const result = (await response.json()) as any;
     res.json({ success: true, data: { agent_name: name, task_id: result.task_id, status: 'queued' } });
   } catch (error) {
     logger.error('Error running agent:', error);
@@ -81,7 +81,7 @@ export async function runAllAgents(req: Request, res: Response): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ context: req.body.context || {} }),
     });
-    const result = await response.json() as any;
+    const result = (await response.json()) as any;
     res.json({ success: true, data: { task_id: result.task_id, status: 'queued' } });
   } catch (error) {
     logger.error('Error running all agents:', error);
@@ -96,7 +96,7 @@ export async function getAgentExecutions(req: Request, res: Response): Promise<v
     const limit = parseInt(req.query.limit as string) || 50;
     const result = await pool.query(
       'SELECT * FROM agent_executions WHERE agent_name = $1 ORDER BY created_at DESC LIMIT $2',
-      [name, limit]
+      [name, limit],
     );
     res.json({ success: true, data: result.rows });
   } catch (error) {
@@ -111,7 +111,7 @@ export async function getAgentMemory(req: Request, res: Response): Promise<void>
     const { name } = req.params;
     const result = await pool.query(
       'SELECT * FROM agent_memory WHERE agent_name = $1 ORDER BY access_count DESC, created_at DESC LIMIT 100',
-      [name]
+      [name],
     );
     res.json({ success: true, data: result.rows });
   } catch (error) {
@@ -124,10 +124,7 @@ export async function getKnowledgeGraph(req: Request, res: Response): Promise<vo
   try {
     const pool = getPool();
     const limit = parseInt(req.query.limit as string) || 100;
-    const result = await pool.query(
-      'SELECT * FROM knowledge_edges ORDER BY weight DESC LIMIT $1',
-      [limit]
-    );
+    const result = await pool.query('SELECT * FROM knowledge_edges ORDER BY weight DESC LIMIT $1', [limit]);
     const stats = await pool.query(`
       SELECT relationship, COUNT(*) AS count
       FROM knowledge_edges
@@ -140,7 +137,7 @@ export async function getKnowledgeGraph(req: Request, res: Response): Promise<vo
         edges: result.rows,
         relationship_stats: stats.rows,
         total_edges: result.rowCount,
-      }
+      },
     });
   } catch (error) {
     logger.error('Error fetching knowledge graph:', error);
@@ -152,10 +149,7 @@ export async function getExecutiveBriefings(req: Request, res: Response): Promis
   try {
     const pool = getPool();
     const limit = parseInt(req.query.limit as string) || 30;
-    const result = await pool.query(
-      'SELECT * FROM executive_briefings ORDER BY briefing_date DESC LIMIT $1',
-      [limit]
-    );
+    const result = await pool.query('SELECT * FROM executive_briefings ORDER BY briefing_date DESC LIMIT $1', [limit]);
     res.json({ success: true, data: result.rows });
   } catch (error) {
     logger.error('Error fetching briefings:', error);
@@ -169,7 +163,7 @@ export async function generateBriefing(req: Request, res: Response): Promise<voi
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
-    const result = await response.json() as any;
+    const result = (await response.json()) as any;
     res.json({ success: true, data: { task_id: result.task_id, status: 'queued' } });
   } catch (error) {
     logger.error('Error generating briefing:', error);
@@ -189,7 +183,7 @@ export async function intelligentSearch(req: Request, res: Response): Promise<vo
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
     });
-    const result = await response.json() as any;
+    const result = (await response.json()) as any;
     res.json({ success: true, data: { task_id: result.task_id, status: 'queued', query } });
   } catch (error) {
     logger.error('Error with intelligent search:', error);
@@ -222,10 +216,7 @@ export async function getQualityMetrics(req: Request, res: Response): Promise<vo
   try {
     const pool = getPool();
     const limit = parseInt(req.query.limit as string) || 100;
-    const result = await pool.query(
-      'SELECT * FROM quality_metrics ORDER BY measured_at DESC LIMIT $1',
-      [limit]
-    );
+    const result = await pool.query('SELECT * FROM quality_metrics ORDER BY measured_at DESC LIMIT $1', [limit]);
     res.json({ success: true, data: result.rows });
   } catch (error) {
     logger.error('Error fetching quality metrics:', error);
@@ -244,9 +235,7 @@ export async function getAgentHealthSummary(req: Request, res: Response): Promis
       GROUP BY agent_name, status
       ORDER BY agent_name
     `);
-    const pendingEvents = await pool.query(
-      "SELECT COUNT(*) AS count FROM agent_events WHERE status = 'pending'"
-    );
+    const pendingEvents = await pool.query("SELECT COUNT(*) AS count FROM agent_events WHERE status = 'pending'");
     const totalMemory = await pool.query('SELECT COUNT(*) AS count FROM agent_memory');
 
     res.json({
@@ -256,7 +245,7 @@ export async function getAgentHealthSummary(req: Request, res: Response): Promis
         recent_executions: recentExecutions.rows,
         pending_events: parseInt(pendingEvents.rows[0].count),
         total_memories: parseInt(totalMemory.rows[0].count),
-      }
+      },
     });
   } catch (error) {
     logger.error('Error fetching agent health:', error);

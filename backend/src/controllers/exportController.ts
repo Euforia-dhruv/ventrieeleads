@@ -29,11 +29,26 @@ export async function exportLeads(req: Request, res: Response): Promise<void> {
     const params: any[] = [];
     let paramIndex = 1;
 
-    if (status) { query += ` AND l.status = $${paramIndex++}`; params.push(status); }
-    if (city) { query += ` AND c.city = $${paramIndex++}`; params.push(city); }
-    if (industry) { query += ` AND c.industry = $${paramIndex++}`; params.push(industry); }
-    if (!isNaN(minScore)) { query += ` AND l.score >= $${paramIndex++}`; params.push(minScore); }
-    if (!isNaN(maxScore)) { query += ` AND l.score <= $${paramIndex++}`; params.push(maxScore); }
+    if (status) {
+      query += ` AND l.status = $${paramIndex++}`;
+      params.push(status);
+    }
+    if (city) {
+      query += ` AND c.city = $${paramIndex++}`;
+      params.push(city);
+    }
+    if (industry) {
+      query += ` AND c.industry = $${paramIndex++}`;
+      params.push(industry);
+    }
+    if (!isNaN(minScore)) {
+      query += ` AND l.score >= $${paramIndex++}`;
+      params.push(minScore);
+    }
+    if (!isNaN(maxScore)) {
+      query += ` AND l.score <= $${paramIndex++}`;
+      params.push(maxScore);
+    }
     if (technology) {
       query += ` AND EXISTS (SELECT 1 FROM technologies t WHERE t.company_id = c.id AND t.name ILIKE $${paramIndex++})`;
       params.push(`%${technology}%`);
@@ -45,10 +60,11 @@ export async function exportLeads(req: Request, res: Response): Promise<void> {
     const leads = result.rows;
 
     // Log export
-    await pool.query(
-      'INSERT INTO export_history (format, filters, record_count) VALUES ($1, $2, $3)',
-      [format, JSON.stringify({ status, city, industry, minScore, maxScore, technology }), leads.length]
-    );
+    await pool.query('INSERT INTO export_history (format, filters, record_count) VALUES ($1, $2, $3)', [
+      format,
+      JSON.stringify({ status, city, industry, minScore, maxScore, technology }),
+      leads.length,
+    ]);
 
     if (format === 'csv') {
       if (leads.length === 0) {
@@ -60,13 +76,18 @@ export async function exportLeads(req: Request, res: Response): Promise<void> {
       const headers = Object.keys(leads[0]);
       const csv = [
         headers.join(','),
-        ...leads.map(row => headers.map(h => {
-          const val = row[h];
-          if (val === null || val === undefined) return '';
-          const str = String(val);
-          return str.includes(',') || str.includes('"') || str.includes('\n')
-            ? `"${str.replace(/"/g, '""')}"` : str;
-        }).join(','))
+        ...leads.map((row) =>
+          headers
+            .map((h) => {
+              const val = row[h];
+              if (val === null || val === undefined) return '';
+              const str = String(val);
+              return str.includes(',') || str.includes('"') || str.includes('\n')
+                ? `"${str.replace(/"/g, '""')}"`
+                : str;
+            })
+            .join(','),
+        ),
       ].join('\n');
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="leads.csv"');
@@ -89,11 +110,22 @@ export async function exportLeads(req: Request, res: Response): Promise<void> {
         '',
         '| ' + headers.join(' | ') + ' |',
         '| ' + headers.map(() => '---').join(' | ') + ' |',
-        ...leads.map(l => '| ' + [
-          l.company_name || '', l.company_website || '', l.industry || '',
-          l.city || '', String(l.score || 0), l.status || '',
-          l.company_phone || '', l.company_email || '', String(l.rating || 0)
-        ].join(' | ') + ' |')
+        ...leads.map(
+          (l) =>
+            '| ' +
+            [
+              l.company_name || '',
+              l.company_website || '',
+              l.industry || '',
+              l.city || '',
+              String(l.score || 0),
+              l.status || '',
+              l.company_phone || '',
+              l.company_email || '',
+              String(l.rating || 0),
+            ].join(' | ') +
+            ' |',
+        ),
       ].join('\n');
       res.setHeader('Content-Type', 'text/markdown');
       res.setHeader('Content-Disposition', 'attachment; filename="leads.md"');

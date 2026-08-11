@@ -2,13 +2,10 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import axios from 'axios';
-import { URL } from 'url';
 import { getPool } from '../database/connection';
 import { redisClient } from '../database/redis';
 import { logger } from '../core/logger';
-import {
-  generateToken, generateRefreshToken, verifyToken, AuthRequest
-} from '../middleware/auth';
+import { generateToken, generateRefreshToken, verifyToken, AuthRequest } from '../middleware/auth';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
@@ -71,28 +68,29 @@ export async function register(req: Request, res: Response): Promise<void> {
 
     const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
-    let slug = (workspace_name || name.toLowerCase().replace(/\s+/g, '-'))
-      .replace(/[^a-z0-9-]/g, '').substring(0, 50) || `ws-${Date.now()}`;
+    const slug =
+      (workspace_name || name.toLowerCase().replace(/\s+/g, '-')).replace(/[^a-z0-9-]/g, '').substring(0, 50) ||
+      `ws-${Date.now()}`;
 
     // Ensure unique workspace slug
     let finalSlug = slug;
     let suffix = 1;
-    while (true) {
+    for (;;) {
       const existingSlug = await pool.query('SELECT id FROM workspaces WHERE slug = $1', [finalSlug]);
       if (existingSlug.rows.length === 0) break;
       finalSlug = `${slug}-${suffix++}`;
     }
 
-    const workspaceResult = await pool.query(
-      `INSERT INTO workspaces (name, slug) VALUES ($1, $2) RETURNING id`,
-      [workspace_name || `${name}'s Workspace`, finalSlug]
-    );
+    const workspaceResult = await pool.query(`INSERT INTO workspaces (name, slug) VALUES ($1, $2) RETURNING id`, [
+      workspace_name || `${name}'s Workspace`,
+      finalSlug,
+    ]);
     const workspaceId = workspaceResult.rows[0].id;
 
     const userResult = await pool.query(
       `INSERT INTO users (email, name, hashed_password, role, workspace_id, is_active, email_verified)
        VALUES ($1, $2, $3, 'owner', $4, true, false) RETURNING id, email, name, role, workspace_id, email_verified`,
-      [email.toLowerCase(), name, hashedPassword, workspaceId]
+      [email.toLowerCase(), name, hashedPassword, workspaceId],
     );
 
     const user = userResult.rows[0];
@@ -101,11 +99,18 @@ export async function register(req: Request, res: Response): Promise<void> {
     if (ownerRole.rows.length > 0) {
       await pool.query(
         `INSERT INTO user_workspace_roles (user_id, workspace_id, role_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-        [user.id, workspaceId, ownerRole.rows[0].id]
+        [user.id, workspaceId, ownerRole.rows[0].id],
       );
     }
 
-    const tokenUser = { id: user.id, email: user.email, name: user.name, role: user.role, workspace_id: user.workspace_id, email_verified: user.email_verified };
+    const tokenUser = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      workspace_id: user.workspace_id,
+      email_verified: user.email_verified,
+    };
     const token = generateToken(tokenUser);
     const refreshToken = generateRefreshToken(tokenUser);
 
@@ -116,7 +121,7 @@ export async function register(req: Request, res: Response): Promise<void> {
     await pool.query(
       `INSERT INTO sessions (user_id, token_hash, refresh_token_hash, user_agent, ip_address, device_name, device_type, expires_at, refresh_expires_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW() + INTERVAL '7 days', NOW() + INTERVAL '30 days')`,
-      [user.id, tokenHash, refreshHash, req.headers['user-agent'], req.ip, device_name, device_type]
+      [user.id, tokenHash, refreshHash, req.headers['user-agent'], req.ip, device_name, device_type],
     );
 
     res.status(201).json({
@@ -125,8 +130,8 @@ export async function register(req: Request, res: Response): Promise<void> {
         user: { id: user.id, email: user.email, name: user.name, role: user.role, workspace_id: user.workspace_id },
         token,
         refreshToken,
-        workspace: { id: workspaceId, name: workspace_name || `${name}'s Workspace`, slug }
-      }
+        workspace: { id: workspaceId, name: workspace_name || `${name}'s Workspace`, slug },
+      },
     });
   } catch (error) {
     logger.error('Registration error:', error);
@@ -148,7 +153,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     const result = await pool.query(
       `SELECT id, email, name, role, workspace_id, hashed_password, is_active, email_verified
        FROM users WHERE email = $1 AND is_deleted = false`,
-      [email.toLowerCase()]
+      [email.toLowerCase()],
     );
 
     if (result.rows.length === 0) {
@@ -169,7 +174,14 @@ export async function login(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const tokenUser = { id: user.id, email: user.email, name: user.name, role: user.role, workspace_id: user.workspace_id, email_verified: user.email_verified };
+    const tokenUser = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      workspace_id: user.workspace_id,
+      email_verified: user.email_verified,
+    };
     const token = generateToken(tokenUser);
     const refreshToken = generateRefreshToken(tokenUser);
 
@@ -177,27 +189,24 @@ export async function login(req: Request, res: Response): Promise<void> {
     const refreshHash = hashToken(refreshToken);
     const { device_type, device_name } = parseUserAgent(req.headers['user-agent']);
 
-    const expiresIn = remember_me ? "90 days" : "7 days";
-    const refreshExpiresIn = remember_me ? "180 days" : "30 days";
+    const expiresIn = remember_me ? '90 days' : '7 days';
+    const refreshExpiresIn = remember_me ? '180 days' : '30 days';
 
     await pool.query(
       `INSERT INTO sessions (user_id, token_hash, refresh_token_hash, user_agent, ip_address, device_name, device_type, expires_at, refresh_expires_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW() + INTERVAL '${expiresIn}', NOW() + INTERVAL '${refreshExpiresIn}')`,
-      [user.id, tokenHash, refreshHash, req.headers['user-agent'], req.ip, device_name, device_type]
+      [user.id, tokenHash, refreshHash, req.headers['user-agent'], req.ip, device_name, device_type],
     );
 
-    await pool.query(
-      'UPDATE users SET last_login_at = NOW(), login_count = login_count + 1 WHERE id = $1',
-      [user.id]
-    );
+    await pool.query('UPDATE users SET last_login_at = NOW(), login_count = login_count + 1 WHERE id = $1', [user.id]);
 
     res.json({
       success: true,
       data: {
         user: { id: user.id, email: user.email, name: user.name, role: user.role, workspace_id: user.workspace_id },
         token,
-        refreshToken
-      }
+        refreshToken,
+      },
     });
   } catch (error) {
     logger.error('Login error:', error);
@@ -227,7 +236,7 @@ export async function refreshToken(req: Request, res: Response): Promise<void> {
       `SELECT s.*, u.id as uid, u.email, u.name, u.role, u.workspace_id, u.email_verified, u.is_active
        FROM sessions s JOIN users u ON s.user_id = u.id
        WHERE s.refresh_token_hash = $1 AND s.is_revoked = false AND s.refresh_expires_at > NOW()`,
-      [refreshHash]
+      [refreshHash],
     );
 
     if (session.rows.length === 0) {
@@ -243,19 +252,26 @@ export async function refreshToken(req: Request, res: Response): Promise<void> {
 
     await pool.query('UPDATE sessions SET is_revoked = true WHERE id = $1', [s.id]);
 
-    const tokenUser = { id: s.uid, email: s.email, name: s.name, role: s.role, workspace_id: s.workspace_id, email_verified: s.email_verified };
+    const tokenUser = {
+      id: s.uid,
+      email: s.email,
+      name: s.name,
+      role: s.role,
+      workspace_id: s.workspace_id,
+      email_verified: s.email_verified,
+    };
     const newToken = generateToken(tokenUser);
     const newRefresh = generateRefreshToken(tokenUser);
 
     await pool.query(
       `INSERT INTO sessions (user_id, token_hash, refresh_token_hash, user_agent, ip_address, device_name, device_type, expires_at, refresh_expires_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW() + INTERVAL '7 days', NOW() + INTERVAL '30 days')`,
-      [s.user_id, hashToken(newToken), hashToken(newRefresh), s.user_agent, s.ip_address, s.device_name, s.device_type]
+      [s.user_id, hashToken(newToken), hashToken(newRefresh), s.user_agent, s.ip_address, s.device_name, s.device_type],
     );
 
     res.json({
       success: true,
-      data: { token: newToken, refreshToken: newRefresh }
+      data: { token: newToken, refreshToken: newRefresh },
     });
   } catch (error: any) {
     if (error.name === 'TokenExpiredError' || error.name === 'JsonWebTokenError') {
@@ -280,7 +296,9 @@ export async function logout(req: AuthRequest, res: Response): Promise<void> {
 
       try {
         await redisClient.getClient().setEx(`revoked:${token}`, 7 * 24 * 60 * 60, '1');
-      } catch (e) { /* Redis optional */ }
+      } catch {
+        /* Redis optional */
+      }
     }
 
     res.json({ success: true, message: 'Logged out successfully' });
@@ -320,7 +338,7 @@ export async function me(req: AuthRequest, res: Response): Promise<void> {
     const result = await pool.query(
       `SELECT id, email, name, role, workspace_id, is_active, email_verified, avatar_url, created_at, last_login_at
        FROM users WHERE id = $1 AND is_deleted = false`,
-      [req.user.id]
+      [req.user.id],
     );
 
     if (result.rows.length === 0) {
@@ -328,15 +346,14 @@ export async function me(req: AuthRequest, res: Response): Promise<void> {
       return;
     }
 
-    const workspace = await pool.query(
-      'SELECT id, name, slug, plan FROM workspaces WHERE id = $1',
-      [result.rows[0].workspace_id]
-    );
+    const workspace = await pool.query('SELECT id, name, slug, plan FROM workspaces WHERE id = $1', [
+      result.rows[0].workspace_id,
+    ]);
 
     const sessions = await pool.query(
       `SELECT id, device_name, device_type, ip_address, created_at, last_accessed_at
        FROM sessions WHERE user_id = $1 AND is_revoked = false ORDER BY created_at DESC LIMIT 10`,
-      [req.user.id]
+      [req.user.id],
     );
 
     res.json({
@@ -344,8 +361,8 @@ export async function me(req: AuthRequest, res: Response): Promise<void> {
       data: {
         ...result.rows[0],
         workspace: workspace.rows[0] || null,
-        sessions: sessions.rows
-      }
+        sessions: sessions.rows,
+      },
     });
   } catch (error) {
     logger.error('Get user error:', error);
@@ -363,7 +380,9 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
     }
 
     const pool = getPool();
-    const result = await pool.query('SELECT id FROM users WHERE email = $1 AND is_deleted = false', [email.toLowerCase()]);
+    const result = await pool.query('SELECT id FROM users WHERE email = $1 AND is_deleted = false', [
+      email.toLowerCase(),
+    ]);
 
     if (result.rows.length === 0) {
       res.json({ success: true, message: 'If the email exists, a reset link has been sent' });
@@ -376,7 +395,7 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
 
     await pool.query(
       `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, NOW() + INTERVAL '1 hour')`,
-      [userId, tokenHash]
+      [userId, tokenHash],
     );
 
     logger.info(`Password reset token for ${email}: ${resetToken}`);
@@ -407,7 +426,7 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
 
     const result = await pool.query(
       `SELECT id, user_id, used_at FROM password_reset_tokens WHERE token_hash = $1 AND expires_at > NOW()`,
-      [tokenHash]
+      [tokenHash],
     );
 
     if (result.rows.length === 0) {
@@ -469,10 +488,7 @@ export async function changePassword(req: AuthRequest, res: Response): Promise<v
     const hashedPassword = await bcrypt.hash(new_password, BCRYPT_ROUNDS);
     await pool.query('UPDATE users SET hashed_password = $1 WHERE id = $2', [hashedPassword, req.user.id]);
 
-    await pool.query(
-      'UPDATE sessions SET is_revoked = true WHERE user_id = $1 AND is_revoked = false',
-      [req.user.id]
-    );
+    await pool.query('UPDATE sessions SET is_revoked = true WHERE user_id = $1 AND is_revoked = false', [req.user.id]);
 
     res.json({ success: true, message: 'Password changed successfully' });
   } catch (error) {
@@ -495,7 +511,7 @@ export async function verifyEmail(req: Request, res: Response): Promise<void> {
 
     const result = await pool.query(
       `SELECT id, user_id, verified_at FROM email_verification_tokens WHERE token_hash = $1 AND expires_at > NOW()`,
-      [tokenHash]
+      [tokenHash],
     );
 
     if (result.rows.length === 0) {
@@ -533,7 +549,7 @@ export async function sendVerificationEmail(req: AuthRequest, res: Response): Pr
 
     await pool.query(
       `INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, NOW() + INTERVAL '24 hours')`,
-      [req.user.id, tokenHash]
+      [req.user.id, tokenHash],
     );
 
     logger.info(`Email verification token for ${req.user.email}: ${verifyToken}`);
@@ -555,7 +571,9 @@ export async function requestMagicLink(req: Request, res: Response): Promise<voi
     }
 
     const pool = getPool();
-    const result = await pool.query('SELECT id FROM users WHERE email = $1 AND is_deleted = false', [email.toLowerCase()]);
+    const result = await pool.query('SELECT id FROM users WHERE email = $1 AND is_deleted = false', [
+      email.toLowerCase(),
+    ]);
 
     if (result.rows.length === 0) {
       res.json({ success: true, message: 'If the email exists, a magic link has been sent' });
@@ -567,7 +585,7 @@ export async function requestMagicLink(req: Request, res: Response): Promise<voi
 
     await pool.query(
       `INSERT INTO magic_link_tokens (email, token_hash, expires_at) VALUES ($1, $2, NOW() + INTERVAL '15 minutes')`,
-      [email.toLowerCase(), tokenHash]
+      [email.toLowerCase(), tokenHash],
     );
 
     logger.info(`Magic link for ${email}: ${magicToken}`);
@@ -593,7 +611,7 @@ export async function verifyMagicLink(req: Request, res: Response): Promise<void
 
     const result = await pool.query(
       `SELECT id, email, used_at FROM magic_link_tokens WHERE token_hash = $1 AND expires_at > NOW()`,
-      [tokenHash]
+      [tokenHash],
     );
 
     if (result.rows.length === 0) {
@@ -611,7 +629,7 @@ export async function verifyMagicLink(req: Request, res: Response): Promise<void
 
     const userResult = await pool.query(
       `SELECT id, email, name, role, workspace_id, email_verified, is_active FROM users WHERE email = $1 AND is_deleted = false`,
-      [ml.email]
+      [ml.email],
     );
 
     if (userResult.rows.length === 0) {
@@ -629,7 +647,14 @@ export async function verifyMagicLink(req: Request, res: Response): Promise<void
       await pool.query('UPDATE users SET email_verified = true WHERE id = $1', [user.id]);
     }
 
-    const tokenUser = { id: user.id, email: user.email, name: user.name, role: user.role, workspace_id: user.workspace_id, email_verified: true };
+    const tokenUser = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      workspace_id: user.workspace_id,
+      email_verified: true,
+    };
     const accessToken = generateToken(tokenUser);
     const refreshToken = generateRefreshToken(tokenUser);
 
@@ -637,7 +662,15 @@ export async function verifyMagicLink(req: Request, res: Response): Promise<void
     await pool.query(
       `INSERT INTO sessions (user_id, token_hash, refresh_token_hash, user_agent, ip_address, device_name, device_type, expires_at, refresh_expires_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW() + INTERVAL '7 days', NOW() + INTERVAL '30 days')`,
-      [user.id, hashToken(accessToken), hashToken(refreshToken), req.headers['user-agent'], req.ip, device_name, device_type]
+      [
+        user.id,
+        hashToken(accessToken),
+        hashToken(refreshToken),
+        req.headers['user-agent'],
+        req.ip,
+        device_name,
+        device_type,
+      ],
     );
 
     res.json({
@@ -645,8 +678,8 @@ export async function verifyMagicLink(req: Request, res: Response): Promise<void
       data: {
         user: { id: user.id, email: user.email, name: user.name, role: user.role, workspace_id: user.workspace_id },
         token: accessToken,
-        refreshToken
-      }
+        refreshToken,
+      },
     });
   } catch (error) {
     logger.error('Verify magic link error:', error);
@@ -666,7 +699,7 @@ export async function getSessions(req: AuthRequest, res: Response): Promise<void
     const result = await pool.query(
       `SELECT id, device_name, device_type, ip_address, user_agent, created_at, expires_at
        FROM sessions WHERE user_id = $1 AND is_revoked = false ORDER BY created_at DESC`,
-      [req.user.id]
+      [req.user.id],
     );
 
     res.json({ success: true, data: result.rows });
@@ -689,7 +722,7 @@ export async function revokeSession(req: AuthRequest, res: Response): Promise<vo
 
     const result = await pool.query(
       'UPDATE sessions SET is_revoked = true WHERE id = $1 AND user_id = $2 RETURNING id',
-      [id, req.user.id]
+      [id, req.user.id],
     );
 
     if (result.rows.length === 0) {
@@ -718,8 +751,14 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
     const values: any[] = [];
     let idx = 1;
 
-    if (name) { updates.push(`name = $${idx++}`); values.push(name); }
-    if (avatar_url !== undefined) { updates.push(`avatar_url = $${idx++}`); values.push(avatar_url); }
+    if (name) {
+      updates.push(`name = $${idx++}`);
+      values.push(name);
+    }
+    if (avatar_url !== undefined) {
+      updates.push(`avatar_url = $${idx++}`);
+      values.push(avatar_url);
+    }
 
     if (updates.length === 0) {
       res.status(400).json({ success: false, message: 'No fields to update' });
@@ -731,7 +770,7 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
 
     const result = await pool.query(
       `UPDATE users SET ${updates.join(', ')} WHERE id = $${idx} RETURNING id, email, name, role, workspace_id, avatar_url`,
-      values
+      values,
     );
 
     res.json({ success: true, data: result.rows[0] });
@@ -755,7 +794,7 @@ export async function oauthCallback(req: Request, res: Response): Promise<void> 
 
     const oauthResult = await pool.query(
       `SELECT user_id FROM oauth_connections WHERE provider = $1 AND provider_user_id = $2`,
-      [provider, provider_user_id]
+      [provider, provider_user_id],
     );
 
     let userId: string;
@@ -765,7 +804,7 @@ export async function oauthCallback(req: Request, res: Response): Promise<void> 
       await pool.query(
         `UPDATE oauth_connections SET access_token = $1, refresh_token = $2, provider_name = $3, provider_avatar = $4, updated_at = NOW()
          WHERE provider = $5 AND provider_user_id = $6`,
-        [access_token, refresh_token, name, avatar_url, provider, provider_user_id]
+        [access_token, refresh_token, name, avatar_url, provider, provider_user_id],
       );
     } else {
       const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
@@ -773,15 +812,21 @@ export async function oauthCallback(req: Request, res: Response): Promise<void> 
       if (existingUser.rows.length > 0) {
         userId = existingUser.rows[0].id;
       } else {
-        const workspaceResult = await pool.query(
-          `INSERT INTO workspaces (name, slug) VALUES ($1, $2) RETURNING id`,
-          [`${name}'s Workspace`, `${provider}-${provider_user_id.substring(0, 8)}`]
-        );
+        const workspaceResult = await pool.query(`INSERT INTO workspaces (name, slug) VALUES ($1, $2) RETURNING id`, [
+          `${name}'s Workspace`,
+          `${provider}-${provider_user_id.substring(0, 8)}`,
+        ]);
 
         const userResult = await pool.query(
           `INSERT INTO users (email, name, hashed_password, role, workspace_id, is_active, email_verified, avatar_url)
            VALUES ($1, $2, $3, 'owner', $4, true, true, $5) RETURNING id`,
-          [email.toLowerCase(), name, await bcrypt.hash(crypto.randomBytes(32).toString('hex'), BCRYPT_ROUNDS), workspaceResult.rows[0].id, avatar_url]
+          [
+            email.toLowerCase(),
+            name,
+            await bcrypt.hash(crypto.randomBytes(32).toString('hex'), BCRYPT_ROUNDS),
+            workspaceResult.rows[0].id,
+            avatar_url,
+          ],
         );
         userId = userResult.rows[0].id;
 
@@ -789,7 +834,7 @@ export async function oauthCallback(req: Request, res: Response): Promise<void> 
         if (ownerRole.rows.length > 0) {
           await pool.query(
             `INSERT INTO user_workspace_roles (user_id, workspace_id, role_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-            [userId, workspaceResult.rows[0].id, ownerRole.rows[0].id]
+            [userId, workspaceResult.rows[0].id, ownerRole.rows[0].id],
           );
         }
       }
@@ -797,17 +842,24 @@ export async function oauthCallback(req: Request, res: Response): Promise<void> 
       await pool.query(
         `INSERT INTO oauth_connections (user_id, provider, provider_user_id, provider_email, provider_name, provider_avatar, access_token, refresh_token)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (provider, provider_user_id) DO NOTHING`,
-        [userId, provider, provider_user_id, email, name, avatar_url, access_token, refresh_token]
+        [userId, provider, provider_user_id, email, name, avatar_url, access_token, refresh_token],
       );
     }
 
     const userResult = await pool.query(
       'SELECT id, email, name, role, workspace_id, email_verified FROM users WHERE id = $1',
-      [userId]
+      [userId],
     );
 
     const user = userResult.rows[0];
-    const tokenUser = { id: user.id, email: user.email, name: user.name, role: user.role, workspace_id: user.workspace_id, email_verified: user.email_verified };
+    const tokenUser = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      workspace_id: user.workspace_id,
+      email_verified: user.email_verified,
+    };
     const token = generateToken(tokenUser);
     const refreshToken = generateRefreshToken(tokenUser);
 
@@ -815,7 +867,7 @@ export async function oauthCallback(req: Request, res: Response): Promise<void> 
     await pool.query(
       `INSERT INTO sessions (user_id, token_hash, refresh_token_hash, user_agent, ip_address, device_name, device_type, expires_at, refresh_expires_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW() + INTERVAL '7 days', NOW() + INTERVAL '30 days')`,
-      [userId, hashToken(token), hashToken(refreshToken), req.headers['user-agent'], req.ip, device_name, device_type]
+      [userId, hashToken(token), hashToken(refreshToken), req.headers['user-agent'], req.ip, device_name, device_type],
     );
 
     res.json({
@@ -823,8 +875,8 @@ export async function oauthCallback(req: Request, res: Response): Promise<void> 
       data: {
         user: { id: user.id, email: user.email, name: user.name, role: user.role, workspace_id: user.workspace_id },
         token,
-        refreshToken
-      }
+        refreshToken,
+      },
     });
   } catch (error) {
     logger.error('OAuth callback error:', error);
@@ -841,11 +893,11 @@ export async function googleAuth(req: Request, res: Response): Promise<void> {
     }
 
     const state = crypto.randomBytes(32).toString('hex');
-    const frontendUrl = req.query.returnTo as string || FRONTEND_URL;
+    const frontendUrl = (req.query.returnTo as string) || FRONTEND_URL;
 
     try {
       await redisClient.getClient().setEx(`oauth_state:${state}`, 600, frontendUrl);
-    } catch (e) {
+    } catch {
       logger.warn('Redis unavailable for OAuth state, using state param only');
     }
 
@@ -870,7 +922,11 @@ export async function googleAuth(req: Request, res: Response): Promise<void> {
 // ── Google OAuth: Handle Callback ───────────────────────────
 export async function googleCallback(req: Request, res: Response): Promise<void> {
   try {
-    const { code, state, error: googleError } = req.query as {
+    const {
+      code,
+      state,
+      error: googleError,
+    } = req.query as {
       code?: string;
       state?: string;
       error?: string;
@@ -897,19 +953,23 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
       const stored = await redisClient.getClient().get(`oauth_state:${state}`);
       if (stored) redirectBase = stored;
       await redisClient.getClient().del(`oauth_state:${state}`);
-    } catch (e) {
+    } catch {
       logger.warn('Redis unavailable for state verification');
     }
 
     const callbackUrl = `${req.protocol}://${req.get('host')}/api/auth/google/callback`;
 
-    const tokenRes = await axios.post('https://oauth2.googleapis.com/token', {
-      code,
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
-      redirect_uri: callbackUrl,
-      grant_type: 'authorization_code',
-    }, { timeout: 10000 });
+    const tokenRes = await axios.post(
+      'https://oauth2.googleapis.com/token',
+      {
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: callbackUrl,
+        grant_type: 'authorization_code',
+      },
+      { timeout: 10000 },
+    );
 
     const { access_token, refresh_token, id_token } = tokenRes.data;
 
@@ -919,9 +979,7 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
     let googleAvatar = '';
 
     try {
-      const payload = JSON.parse(
-        Buffer.from(id_token.split('.')[1], 'base64url').toString()
-      );
+      const payload = JSON.parse(Buffer.from(id_token.split('.')[1], 'base64url').toString());
       googleUserId = payload.sub;
       googleEmail = payload.email || '';
       googleName = payload.name || '';
@@ -946,7 +1004,7 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
 
     const oauthResult = await pool.query(
       `SELECT user_id FROM oauth_connections WHERE provider = $1 AND provider_user_id = $2`,
-      ['google', googleUserId]
+      ['google', googleUserId],
     );
 
     let userId: string;
@@ -956,39 +1014,47 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
       await pool.query(
         `UPDATE oauth_connections SET access_token = $1, refresh_token = $2, provider_name = $3, provider_avatar = $4, updated_at = NOW()
          WHERE provider = $5 AND provider_user_id = $6`,
-        [access_token, refresh_token || null, googleName, googleAvatar, 'google', googleUserId]
+        [access_token, refresh_token || null, googleName, googleAvatar, 'google', googleUserId],
       );
 
       if (googleAvatar) {
-        await pool.query('UPDATE users SET avatar_url = $1 WHERE id = $2 AND avatar_url IS NULL', [googleAvatar, userId]);
+        await pool.query('UPDATE users SET avatar_url = $1 WHERE id = $2 AND avatar_url IS NULL', [
+          googleAvatar,
+          userId,
+        ]);
       }
     } else {
-      const existingUser = await pool.query(
-        'SELECT id FROM users WHERE email = $1 AND is_deleted = false',
-        [googleEmail.toLowerCase()]
-      );
+      const existingUser = await pool.query('SELECT id FROM users WHERE email = $1 AND is_deleted = false', [
+        googleEmail.toLowerCase(),
+      ]);
 
       if (existingUser.rows.length > 0) {
         userId = existingUser.rows[0].id;
       } else {
-        let slug = `google-${googleUserId.substring(0, 8)}`;
+        const slug = `google-${googleUserId.substring(0, 8)}`;
         let finalSlug = slug;
         let suffix = 1;
-        while (true) {
+        for (;;) {
           const existingSlug = await pool.query('SELECT id FROM workspaces WHERE slug = $1', [finalSlug]);
           if (existingSlug.rows.length === 0) break;
           finalSlug = `${slug}-${suffix++}`;
         }
 
-        const workspaceResult = await pool.query(
-          `INSERT INTO workspaces (name, slug) VALUES ($1, $2) RETURNING id`,
-          [`${googleName || googleEmail.split('@')[0]}'s Workspace`, finalSlug]
-        );
+        const workspaceResult = await pool.query(`INSERT INTO workspaces (name, slug) VALUES ($1, $2) RETURNING id`, [
+          `${googleName || googleEmail.split('@')[0]}'s Workspace`,
+          finalSlug,
+        ]);
 
         const userResult = await pool.query(
           `INSERT INTO users (email, name, hashed_password, role, workspace_id, is_active, email_verified, avatar_url)
            VALUES ($1, $2, $3, 'owner', $4, true, true, $5) RETURNING id`,
-          [googleEmail.toLowerCase(), googleName, await bcrypt.hash(crypto.randomBytes(32).toString('hex'), BCRYPT_ROUNDS), workspaceResult.rows[0].id, googleAvatar || null]
+          [
+            googleEmail.toLowerCase(),
+            googleName,
+            await bcrypt.hash(crypto.randomBytes(32).toString('hex'), BCRYPT_ROUNDS),
+            workspaceResult.rows[0].id,
+            googleAvatar || null,
+          ],
         );
         userId = userResult.rows[0].id;
 
@@ -996,7 +1062,7 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
         if (ownerRole.rows.length > 0) {
           await pool.query(
             `INSERT INTO user_workspace_roles (user_id, workspace_id, role_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-            [userId, workspaceResult.rows[0].id, ownerRole.rows[0].id]
+            [userId, workspaceResult.rows[0].id, ownerRole.rows[0].id],
           );
         }
       }
@@ -1004,17 +1070,24 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
       await pool.query(
         `INSERT INTO oauth_connections (user_id, provider, provider_user_id, provider_email, provider_name, provider_avatar, access_token, refresh_token)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (provider, provider_user_id) DO NOTHING`,
-        [userId, 'google', googleUserId, googleEmail, googleName, googleAvatar, access_token, refresh_token || null]
+        [userId, 'google', googleUserId, googleEmail, googleName, googleAvatar, access_token, refresh_token || null],
       );
     }
 
     const userResult = await pool.query(
       `SELECT id, email, name, role, workspace_id, email_verified FROM users WHERE id = $1`,
-      [userId]
+      [userId],
     );
     const user = userResult.rows[0];
 
-    const tokenUser = { id: user.id, email: user.email, name: user.name, role: user.role, workspace_id: user.workspace_id, email_verified: user.email_verified };
+    const tokenUser = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      workspace_id: user.workspace_id,
+      email_verified: user.email_verified,
+    };
     const token = generateToken(tokenUser);
     const refreshToken = generateRefreshToken(tokenUser);
 
@@ -1022,13 +1095,10 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
     await pool.query(
       `INSERT INTO sessions (user_id, token_hash, refresh_token_hash, user_agent, ip_address, device_name, device_type, expires_at, refresh_expires_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW() + INTERVAL '7 days', NOW() + INTERVAL '30 days')`,
-      [userId, hashToken(token), hashToken(refreshToken), req.headers['user-agent'], req.ip, device_name, device_type]
+      [userId, hashToken(token), hashToken(refreshToken), req.headers['user-agent'], req.ip, device_name, device_type],
     );
 
-    await pool.query(
-      'UPDATE users SET last_login_at = NOW(), login_count = login_count + 1 WHERE id = $1',
-      [userId]
-    );
+    await pool.query('UPDATE users SET last_login_at = NOW(), login_count = login_count + 1 WHERE id = $1', [userId]);
 
     const separator = redirectBase.includes('?') ? '&' : '?';
     res.redirect(`${redirectBase}/auth/callback${separator}token=${token}&refreshToken=${refreshToken}`);

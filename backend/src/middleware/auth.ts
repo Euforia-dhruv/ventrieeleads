@@ -5,7 +5,6 @@ import { redisClient } from '../database/redis';
 import { logger } from '../core/logger';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 export interface AuthUser {
   id: string;
@@ -22,19 +21,13 @@ export interface AuthRequest extends Request {
 }
 
 export function generateToken(user: AuthUser): string {
-  return jwt.sign(
-    { id: user.id, email: user.email, role: user.role, workspace_id: user.workspace_id },
-    JWT_SECRET,
-    { expiresIn: 7 * 24 * 60 * 60 }
-  );
+  return jwt.sign({ id: user.id, email: user.email, role: user.role, workspace_id: user.workspace_id }, JWT_SECRET, {
+    expiresIn: 7 * 24 * 60 * 60,
+  });
 }
 
 export function generateRefreshToken(user: AuthUser): string {
-  return jwt.sign(
-    { id: user.id, type: 'refresh' },
-    JWT_SECRET,
-    { expiresIn: 30 * 24 * 60 * 60 }
-  );
+  return jwt.sign({ id: user.id, type: 'refresh' }, JWT_SECRET, { expiresIn: 30 * 24 * 60 * 60 });
 }
 
 export function verifyToken(token: string): any {
@@ -67,7 +60,7 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
     const pool = getPool();
     const result = await pool.query(
       'SELECT id, email, name, role, workspace_id, email_verified, is_active FROM users WHERE id = $1 AND is_deleted = false',
-      [decoded.id]
+      [decoded.id],
     );
 
     if (result.rows.length === 0 || !result.rows[0].is_active) {
@@ -82,7 +75,7 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       name: user.name,
       role: user.role,
       workspace_id: user.workspace_id,
-      email_verified: user.email_verified
+      email_verified: user.email_verified,
     };
     req.workspaceId = user.workspace_id;
 
@@ -128,12 +121,15 @@ export async function requirePermission(permission: string) {
     }
 
     const pool = getPool();
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT 1 FROM user_workspace_roles uwr
       JOIN role_permissions rp ON rp.role_id = uwr.role_id
       JOIN permissions p ON p.id = rp.permission_id
       WHERE uwr.user_id = $1 AND uwr.workspace_id = $2 AND p.name = $3
-    `, [req.user.id, req.workspaceId, permission]);
+    `,
+      [req.user.id, req.workspaceId, permission],
+    );
 
     if (result.rows.length === 0) {
       res.status(403).json({ success: false, message: `Missing permission: ${permission}` });
@@ -160,7 +156,7 @@ export async function authenticateApiKey(req: AuthRequest, res: Response, next: 
        JOIN users u ON ak.user_id = u.id
        WHERE ak.key_prefix = $1 AND ak.is_active = true AND ak.workspace_id IS NOT NULL
        AND (ak.expires_at IS NULL OR ak.expires_at > NOW())`,
-      [prefix]
+      [prefix],
     );
 
     if (result.rows.length === 0) {
@@ -185,7 +181,7 @@ export async function authenticateApiKey(req: AuthRequest, res: Response, next: 
       name: key.name,
       role: key.role,
       workspace_id: key.workspace_id,
-      email_verified: true
+      email_verified: true,
     };
     req.workspaceId = key.workspace_id;
 

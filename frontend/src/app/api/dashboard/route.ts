@@ -5,7 +5,7 @@ const API_BASE = process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API
 export async function GET() {
   try {
     const res = await fetch(`${API_BASE}/api/dashboard/stats`, {
-      cache: 'no-store'
+      cache: 'no-store',
     });
     const data = await res.json();
     return NextResponse.json(data);
@@ -23,8 +23,8 @@ export async function GET() {
         avgLeadScore: 0,
         byIndustry: {},
         byCity: {},
-        byStatus: {}
-      }
+        byStatus: {},
+      },
     });
   }
 }

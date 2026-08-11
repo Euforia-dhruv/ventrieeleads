@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const res = await fetch(`${API_URL}/api/campaigns?${queryString}`);
     const data = await res.json();
     return NextResponse.json(data);
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, data: [] }, { status: 500 });
   }
 }
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     });
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, message: 'Failed to create campaign' }, { status: 500 });
   }
 }

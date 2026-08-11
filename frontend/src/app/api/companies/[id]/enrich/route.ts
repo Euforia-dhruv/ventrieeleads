@@ -13,7 +13,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, message: 'Failed to enrich company' }, { status: 500 });
   }
 }

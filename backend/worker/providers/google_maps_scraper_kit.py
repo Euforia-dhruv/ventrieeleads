@@ -3,7 +3,6 @@ import asyncio
 import logging
 import re
 from typing import List, Optional, Dict
-from urllib.parse import quote_plus
 from worker.providers.base import BaseProvider, NormalizedLead
 
 logger = logging.getLogger(__name__)
@@ -41,8 +40,9 @@ class GoogleMapsScraperKitProvider(BaseProvider):
         **kwargs
     ) -> List[NormalizedLead]:
         search_query = f"{query} {location}".strip() if location else query
-        url = f"{self.BASE_URL}{quote_plus(search_query)}"
-        return await self._scrape_google_maps(url, max_results, min_rating, min_reviews)
+        return await self._scrape_google_maps(
+            query, location, max_results, min_rating, min_reviews
+        )
 
     async def search_by_map(
         self,
@@ -54,8 +54,9 @@ class GoogleMapsScraperKitProvider(BaseProvider):
         min_reviews: int = 0,
         **kwargs
     ) -> List[NormalizedLead]:
-        url = f"https://www.google.com/maps/search/{quote_plus(query)}/@{lat},{lng},14z"
-        return await self._scrape_google_maps(url, max_results, min_rating, min_reviews)
+        return await self._scrape_google_maps(
+            query, f"{lat},{lng}", max_results, min_rating, min_reviews
+        )
 
     async def search_by_bounding_box(
         self,
@@ -68,8 +69,9 @@ class GoogleMapsScraperKitProvider(BaseProvider):
     ) -> List[NormalizedLead]:
         center_lat = (north + south) / 2
         center_lng = (east + west) / 2
-        url = f"https://www.google.com/maps/search/{quote_plus(query)}/@{center_lat},{center_lng},12z"
-        return await self._scrape_google_maps(url, max_results, min_rating, min_reviews)
+        return await self._scrape_google_maps(
+            query, f"{center_lat},{center_lng}", max_results, min_rating, min_reviews
+        )
 
     async def search_categories(
         self,
@@ -82,7 +84,8 @@ class GoogleMapsScraperKitProvider(BaseProvider):
 
     async def _scrape_google_maps(
         self,
-        url: str,
+        query: str,
+        location: str,
         max_results: int,
         min_rating: float,
         min_reviews: float
@@ -91,7 +94,7 @@ class GoogleMapsScraperKitProvider(BaseProvider):
         try:
             from worker.scrapers.google_maps import google_maps_scraper
             results = await google_maps_scraper.search(
-                query="", location="", max_results=max_results,
+                query=query, location=location, max_results=max_results,
                 min_rating=min_rating, min_reviews=min_reviews
             )
             return [self._normalize_gm(r) for r in results]

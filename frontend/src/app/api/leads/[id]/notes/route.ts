@@ -7,11 +7,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { id } = await params;
     const body = await request.json();
     const res = await fetch(`${API_URL}/api/leads/${id}/notes`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, message: 'Failed to add note' }, { status: 500 });
   }
 }

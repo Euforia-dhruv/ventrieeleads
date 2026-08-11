@@ -12,7 +12,7 @@ const badgeVariants = {
   outline: 'text-foreground',
   success: 'border-transparent bg-green-500/10 text-green-500',
   warning: 'border-transparent bg-yellow-500/10 text-yellow-500',
-  info: 'border-transparent bg-blue-500/10 text-blue-500'
+  info: 'border-transparent bg-blue-500/10 text-blue-500',
 };
 
 const Badge = React.forwardRef<HTMLDivElement, BadgeProps>(({ className, variant = 'default', ...props }, ref) => (
@@ -21,7 +21,7 @@ const Badge = React.forwardRef<HTMLDivElement, BadgeProps>(({ className, variant
     className={cn(
       'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
       badgeVariants[variant],
-      className
+      className,
     )}
     {...props}
   />

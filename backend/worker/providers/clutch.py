@@ -14,6 +14,7 @@ class ClutchProvider(BaseProvider):
     slug = "clutch"
     description = "Clutch.co agency directory - leading B2B ratings and reviews"
     requires_browser = False
+    supports_map_search = True
 
     BASE_URL = "https://clutch.co"
 

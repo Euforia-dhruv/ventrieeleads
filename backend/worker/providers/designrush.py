@@ -14,6 +14,7 @@ class DesignRushProvider(BaseProvider):
     slug = "designrush"
     description = "DesignRush.com - top agency rankings and reviews"
     requires_browser = False
+    supports_map_search = True
 
     BASE_URL = "https://www.designrush.com"
 

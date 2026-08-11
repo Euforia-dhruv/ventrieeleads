@@ -69,22 +69,22 @@ class Company(BaseModel):
 
     name = Column(String(255), nullable=False)
     slug = Column(String(255), index=True)
-    website = Column(String(500))
+    website = Column(String(500), index=True)
     description = Column(Text)
     industry = Column(String(100), index=True)
     city = Column(String(100), index=True)
     area = Column(String(100))
     country = Column(String(100), index=True)
     address = Column(Text)
-    phone = Column(String(50))
-    email = Column(String(255))
+    phone = Column(String(50), index=True)
+    email = Column(String(255), index=True)
     logo_url = Column(Text)
     rating = Column(Float, default=0)
     review_count = Column(Integer, default=0)
     opening_hours = Column(JSONB, default=dict)
     latitude = Column(Float)
     longitude = Column(Float)
-    google_maps_url = Column(Text)
+    google_maps_url = Column(Text, index=True)
     source = Column(String(100))
     screenshot_url = Column(Text)
     twitter = Column(String(500))
@@ -1207,4 +1207,27 @@ class SystemMetric(BaseModel):
     __table_args__ = (
         Index("ix_sm_category", "metric_category", "metric_name"),
         Index("ix_sm_recorded", "recorded_at"),
+    )
+
+
+# ── Module 12: Outreach Tracking ────────────────────────────────────────────
+
+
+class OutreachActivity(BaseModel):
+    __tablename__ = "outreach_activities"
+
+    lead_id = Column(UUID(as_uuid=True), ForeignKey("leads.id"), nullable=False, index=True)
+    channel = Column(String(50), nullable=False)
+    message = Column(Text)
+    status = Column(String(50), default="draft")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    lead = relationship("Lead", backref="outreach_activities")
+
+    __table_args__ = (
+        Index("ix_outreach_lead", "lead_id"),
+        Index("ix_outreach_channel", "channel"),
+        Index("ix_outreach_status", "status"),
+        Index("ix_outreach_created", "created_at"),
     )

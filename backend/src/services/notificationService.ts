@@ -29,8 +29,8 @@ class NotificationService {
           payload.title,
           payload.body || null,
           JSON.stringify(payload.data || {}),
-          payload.priority || 5
-        ]
+          payload.priority || 5,
+        ],
       );
 
       const notificationId = result.rows[0].id;
@@ -42,14 +42,13 @@ class NotificationService {
           body: payload.body,
           event_type: payload.event_type,
           data: payload.data,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
         });
       }
 
-      await pool.query(
-        `UPDATE notification_queue SET status = 'sent', sent_at = NOW() WHERE id = $1`,
-        [notificationId]
-      );
+      await pool.query(`UPDATE notification_queue SET status = 'sent', sent_at = NOW() WHERE id = $1`, [
+        notificationId,
+      ]);
 
       logger.info(`Notification sent: ${payload.channel}/${payload.event_type} -> ${payload.title}`);
     } catch (error) {
@@ -57,18 +56,31 @@ class NotificationService {
     }
   }
 
-  async broadcastToWorkspace(workspaceId: string, eventType: string, title: string, body?: string, data?: Record<string, any>): Promise<void> {
+  async broadcastToWorkspace(
+    workspaceId: string,
+    eventType: string,
+    title: string,
+    body?: string,
+    data?: Record<string, any>,
+  ): Promise<void> {
     await this.send({
       workspace_id: workspaceId,
       channel: 'browser',
       event_type: eventType,
       title,
       body,
-      data
+      data,
     });
   }
 
-  async notifyUser(userId: string, workspaceId: string, eventType: string, title: string, body?: string, data?: Record<string, any>): Promise<void> {
+  async notifyUser(
+    userId: string,
+    workspaceId: string,
+    eventType: string,
+    title: string,
+    body?: string,
+    data?: Record<string, any>,
+  ): Promise<void> {
     await this.send({
       workspace_id: workspaceId,
       user_id: userId,
@@ -76,7 +88,7 @@ class NotificationService {
       event_type: eventType,
       title,
       body,
-      data
+      data,
     });
   }
 
@@ -86,7 +98,7 @@ class NotificationService {
       `SELECT * FROM notification_queue
        WHERE user_id = $1 OR (workspace_id = (SELECT workspace_id FROM users WHERE id = $1) AND user_id IS NULL)
        ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
-      [userId, limit, offset]
+      [userId, limit, offset],
     );
     return result.rows;
   }
@@ -95,7 +107,7 @@ class NotificationService {
     const pool = getPool();
     await pool.query(
       `UPDATE notification_queue SET read_at = NOW(), status = 'read' WHERE id = $1 AND (user_id = $2 OR user_id IS NULL)`,
-      [notificationId, userId]
+      [notificationId, userId],
     );
   }
 
@@ -105,7 +117,7 @@ class NotificationService {
       `UPDATE notification_queue SET read_at = NOW(), status = 'read'
        WHERE (user_id = $1 OR (workspace_id = (SELECT workspace_id FROM users WHERE id = $1) AND user_id IS NULL))
        AND read_at IS NULL`,
-      [userId]
+      [userId],
     );
   }
 
@@ -115,7 +127,7 @@ class NotificationService {
       `SELECT COUNT(*) FROM notification_queue
        WHERE (user_id = $1 OR (workspace_id = (SELECT workspace_id FROM users WHERE id = $1) AND user_id IS NULL))
        AND read_at IS NULL`,
-      [userId]
+      [userId],
     );
     return parseInt(result.rows[0].count);
   }

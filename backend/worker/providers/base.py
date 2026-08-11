@@ -139,8 +139,29 @@ class BaseProvider(ABC):
         min_reviews: int = 0,
         **kwargs
     ) -> List[NormalizedLead]:
-        """Search near a map point. Override if provider supports coordinates."""
-        return []
+        """Search near a map point. Override if provider supports coordinates.
+
+        Default implementation reverse-geocodes the point to a text location and
+        delegates to `search()`, so directory-style providers get map parity even
+        though they only understand city/area names.
+        """
+        try:
+            from worker.services.geocode import geocode_to_location
+            location = await geocode_to_location(lat, lng, radius_km)
+            if not location:
+                logger.warning(f"Provider {self.slug}: no location resolved for ({lat},{lng})")
+                return []
+            return await self.search(
+                query=query,
+                location=location,
+                max_results=max_results,
+                min_rating=min_rating,
+                min_reviews=min_reviews,
+                **kwargs
+            )
+        except Exception as e:
+            logger.error(f"Provider {self.slug} search_by_map failed: {e}")
+            return []
 
     async def search_by_bounding_box(
         self,

@@ -36,6 +36,7 @@ class WebsiteScraper:
             "facebook": "",
             "linkedin": "",
             "youtube": "",
+            "tiktok": "",
             "contact_page": "",
             "about_page": "",
             "services": [],
@@ -66,6 +67,7 @@ class WebsiteScraper:
                 result["facebook"] = self._extract_social(soup, "facebook")
                 result["linkedin"] = self._extract_social(soup, "linkedin")
                 result["youtube"] = self._extract_social(soup, "youtube")
+                result["tiktok"] = self._extract_social(soup, "tiktok")
                 result["services"] = self._extract_services(soup, text)
 
                 contact_page = await self._find_contact_page(soup, url, client)
@@ -172,20 +174,27 @@ class WebsiteScraper:
         patterns = {
             "instagram": [
                 r'instagram\.com/([a-zA-Z0-9_.]+)',
-                r'instagram\.com/([a-zA-Z0-9_.]+)',
+                r'instagr\.am/([a-zA-Z0-9_.]+)',
             ],
             "facebook": [
                 r'facebook\.com/([a-zA-Z0-9_.]+)',
                 r'fb\.com/([a-zA-Z0-9_.]+)',
+                r'fb\.me/([a-zA-Z0-9_.]+)',
             ],
             "linkedin": [
                 r'linkedin\.com/company/([a-zA-Z0-9_-]+)',
                 r'linkedin\.com/in/([a-zA-Z0-9_-]+)',
+                r'linkedin\.com/school/([a-zA-Z0-9_-]+)',
             ],
             "youtube": [
                 r'youtube\.com/@([a-zA-Z0-9_-]+)',
                 r'youtube\.com/channel/([a-zA-Z0-9_-]+)',
                 r'youtube\.com/c/([a-zA-Z0-9_-]+)',
+                r'youtube\.com/user/([a-zA-Z0-9_-]+)',
+            ],
+            "tiktok": [
+                r'tiktok\.com/@([a-zA-Z0-9_.]+)',
+                r'tiktok\.com/@([a-zA-Z0-9_.]+)/video',
             ],
         }
         html = str(soup)

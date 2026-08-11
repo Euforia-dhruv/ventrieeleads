@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
         },
       });
     }
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, message: 'Export failed' }, { status: 500 });
   }
 }
