@@ -22,8 +22,10 @@ export async function POST(request: NextRequest) {
 
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch {
-    return NextResponse.json({ success: false, message: 'Failed to create search job' }, { status: 500 });
+  } catch (e: unknown) {
+    const errMsg = e instanceof Error ? e.message : String(e);
+    console.error(`[search] POST error: ${errMsg}, backend: ${BACKEND_URL}`);
+    return NextResponse.json({ success: false, message: `Search failed: ${errMsg}` }, { status: 500 });
   }
 }
 
