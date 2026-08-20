@@ -1,4 +1,4 @@
-"""Website scraper for extracting contact info and social links."""
+"""Website scraper for extracting contact info and social links — Scrapling-first with httpx fallback."""
 import re
 import logging
 from typing import Dict, List, Optional
@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class WebsiteScraper:
-    """Scrape company websites for contact information."""
+    """Scrape company websites for contact information using Scrapling (primary) or httpx (fallback)."""
 
     def __init__(self):
         self.timeout = 15
@@ -21,7 +21,7 @@ class WebsiteScraper:
         }
 
     async def scrape(self, url: str) -> Dict:
-        """Scrape a website and extract information."""
+        """Scrape a website and extract information. Tries Scrapling first, falls back to httpx."""
         logger.info(f"Scraping website: {url}")
 
         result = {
@@ -43,6 +43,44 @@ class WebsiteScraper:
             "metadata": {}
         }
 
+        # Try Scrapling first (better anti-bot bypass)
+        try:
+            from scrapling import Fetcher
+            fetcher = Fetcher(auto_match=False)
+            page = fetcher.get(url, timeout=self.timeout, headless=True, stealthy_headers=True)
+
+            if page and page.status == 200:
+                html = page.html_content if hasattr(page, 'html_content') else str(page)
+                soup = BeautifulSoup(html, "html.parser")
+                text = soup.get_text(separator=" ", strip=True)
+
+                result["title"] = self._extract_title(soup)
+                result["description"] = self._extract_description(soup)
+                result["logo_url"] = self._extract_logo(soup, url)
+                result["emails"] = self._extract_emails(text)
+                result["phone_numbers"] = self._extract_phones(text)
+                result["whatsapp"] = self._extract_whatsapp(soup, text)
+                result["instagram"] = self._extract_social(soup, "instagram")
+                result["facebook"] = self._extract_social(soup, "facebook")
+                result["linkedin"] = self._extract_social(soup, "linkedin")
+                result["youtube"] = self._extract_social(soup, "youtube")
+                result["tiktok"] = self._extract_social(soup, "tiktok")
+                result["services"] = self._extract_services(soup, text)
+
+                contact_page = await self._find_contact_page(soup, url, None)
+                result["contact_page"] = contact_page
+
+                about_page = await self._find_about_page(soup, url, None)
+                result["about_page"] = about_page
+
+                logger.info(f"Scrapling scraped {url}: {len(result['emails'])} emails, {len(result['phone_numbers'])} phones")
+                return result
+        except ImportError:
+            logger.debug("Scrapling not installed, using httpx fallback")
+        except Exception as e:
+            logger.debug(f"Scrapling scrape failed for {url}: {e}, falling back to httpx")
+
+        # Fallback to httpx + BeautifulSoup
         try:
             async with httpx.AsyncClient(
                 timeout=self.timeout,
@@ -89,7 +127,7 @@ class WebsiteScraper:
                     except Exception:
                         pass
 
-                logger.info(f"Scraped {url}: {len(result['emails'])} emails, {len(result['phone_numbers'])} phones")
+                logger.info(f"httpx scraped {url}: {len(result['emails'])} emails, {len(result['phone_numbers'])} phones")
 
         except Exception as e:
             logger.error(f"Failed to scrape {url}: {e}")

@@ -1,4 +1,4 @@
-"""Google Maps scraper — robust Playwright-based with coordinate extraction, timeout guards, and partial results."""
+"""Google Maps scraper — Scrapling-first with Playwright fallback, coordinate extraction, timeout guards, and partial results."""
 import asyncio
 import re
 import logging
@@ -29,7 +29,7 @@ class GoogleMapsResult:
 
 
 class GoogleMapsScraper:
-    """Scrape Google Maps for business listings with stealth + web fallback."""
+    """Scrape Google Maps for business listings with Scrapling-first + Playwright fallback."""
 
     BASE_URL = "https://www.google.com/maps/search/"
     PAGE_TIMEOUT_MS = 20_000
@@ -76,17 +76,301 @@ class GoogleMapsScraper:
         lat: float = 0,
         lng: float = 0,
     ) -> List[GoogleMapsResult]:
+        # Try Scrapling first (fastest, anti-bot bypass)
+        results = await self._search_scrapling(
+            query, location, max_results, min_rating, min_reviews, lat, lng
+        )
+        if results:
+            return results
+
+        # Fallback to Playwright
+        logger.info("Scrapling returned 0 results, trying Playwright fallback")
         results = await self._search_playwright(
             query, location, max_results, min_rating, min_reviews, lat, lng
         )
-        if not results:
-            logger.info("Playwright returned 0 results, trying web fallback")
-            results = await self._search_web_fallback(
-                query, location, max_results, min_rating, min_reviews
-            )
+        if results:
+            return results
+
+        # Final fallback: web scraping (no browser)
+        logger.info("Playwright returned 0 results, trying web fallback")
+        results = await self._search_web_fallback(
+            query, location, max_results, min_rating, min_reviews
+        )
         return results
 
-    # ── Playwright scrape ─────────────────────────────────────────
+    # ── Scrapling scrape (primary) ────────────────────────────────
+
+    async def _search_scrapling(
+        self,
+        query: str,
+        location: str,
+        max_results: int,
+        min_rating: float,
+        min_reviews: float,
+        lat: float = 0,
+        lng: float = 0,
+    ) -> List[GoogleMapsResult]:
+        """Scrape Google Maps using Scrapling's StealthyFetcher (anti-bot bypass)."""
+        try:
+            from scrapling import Fetcher
+        except ImportError:
+            logger.warning("Scrapling not installed, skipping")
+            return []
+
+        url = self._build_search_url(query, location, lat, lng)
+        logger.info(f"Scrapling Google Maps search: {url}")
+
+        results: List[GoogleMapsResult] = []
+        t0 = time.time()
+
+        try:
+            fetcher = Fetcher(auto_match=False)
+
+            page = fetcher.get(
+                url,
+                timeout=self.PAGE_TIMEOUT_MS / 1000,
+                headless=True,
+                stealthy_headers=True,
+            )
+
+            if not page:
+                logger.warning("Scrapling returned empty page")
+                return []
+
+            await asyncio.sleep(3)
+
+            # Check for consent / cookie wall
+            try:
+                consent = page.css_first('button:has-text("Accept all")')
+                if consent:
+                    consent.click()
+                    await asyncio.sleep(1)
+            except Exception:
+                pass
+
+            # Try to find feed items using CSS selectors
+            feed_items = page.css('[role="article"]')
+            if not feed_items:
+                feed_items = page.css('div.Nv2PK, a.hfpxzc, div.bfdHYd')
+
+            logger.info(f"Scrapling found {len(feed_items)} raw items")
+
+            for item in feed_items[:max_results]:
+                if time.time() - t0 > self.OVERALL_TIMEOUT_S:
+                    logger.warning("Overall timeout during Scrapling parsing")
+                    break
+                try:
+                    result = self._parse_scrapling_item(item)
+                    if result:
+                        results.append(result)
+                except Exception as e:
+                    logger.debug(f"Scrapling parse error: {e}")
+
+            logger.info(f"Scrapling parsed {len(results)} results from feed")
+
+            # Enrich details from place pages (top N)
+            enrich_count = min(len(results), self.MAX_DETAIL_ENRICH)
+            for i in range(enrich_count):
+                if time.time() - t0 > self.OVERALL_TIMEOUT_S:
+                    break
+                r = results[i]
+                if not r.google_maps_url:
+                    continue
+                try:
+                    detail_page = fetcher.get(
+                        r.google_maps_url,
+                        timeout=self.DETAIL_TIMEOUT_MS / 1000,
+                        headless=True,
+                        stealthy_headers=True,
+                    )
+                    if detail_page:
+                        details = self._parse_scrapling_details(detail_page)
+                        if details.get("website"):
+                            r.website = details["website"]
+                        if details.get("phone"):
+                            r.phone = details["phone"]
+                        if details.get("address"):
+                            r.address = details["address"]
+                        if details.get("review_count"):
+                            r.review_count = details["review_count"]
+                        if details.get("opening_hours"):
+                            r.opening_hours = {"text": details["opening_hours"]}
+                        if details.get("latitude") and not r.latitude:
+                            r.latitude = details["latitude"]
+                        if details.get("longitude") and not r.longitude:
+                            r.longitude = details["longitude"]
+                except Exception as e:
+                    logger.debug(f"Scrapling detail enrich failed for {r.name}: {e}")
+
+        except Exception as e:
+            logger.error(f"Scrapling search failed: {e}")
+            return []
+
+        # Extract coordinates from Maps URLs if still zero
+        for r in results:
+            if not r.latitude or r.latitude == 0:
+                lat_e, lng_e = self._extract_coords_from_url(r.google_maps_url)
+                if lat_e and lng_e:
+                    r.latitude = lat_e
+                    r.longitude = lng_e
+
+        # Apply filters
+        if min_rating > 0:
+            results = [r for r in results if r.rating >= min_rating]
+        if min_reviews > 0:
+            results = [r for r in results if r.review_count >= min_reviews]
+
+        logger.info(f"Scrapling final: {len(results)} results")
+        return results[:max_results]
+
+    def _parse_scrapling_item(self, item) -> Optional[GoogleMapsResult]:
+        """Parse a single feed item from Scrapling page."""
+        # Name
+        name = ""
+        for sel in ['[aria-label]', '.qBF1Pd', '.fontHeadlineSmall', 'a.hfpxzc span']:
+            try:
+                el = item.css_first(sel)
+                if el:
+                    name = (el.attrib.get("aria-label", "") or el.text or "").strip()
+                    if name:
+                        break
+            except Exception:
+                pass
+        if not name:
+            return None
+
+        # Rating
+        rating = 0.0
+        for sel in ['.MW4etd', '.ZkP5Je']:
+            try:
+                el = item.css_first(sel)
+                if el:
+                    txt = el.text or ""
+                    nums = re.search(r'[\d.]+', txt)
+                    if nums:
+                        rating = float(nums.group())
+                        break
+            except Exception:
+                pass
+
+        # Category
+        category = ""
+        try:
+            cat_el = item.css_first('.W4Efsd span:first-child')
+            if cat_el:
+                category = (cat_el.text or "").strip()
+        except Exception:
+            pass
+
+        # Address
+        address = ""
+        try:
+            addr_el = item.css_first('.W4Efsd .W4Efsd span:last-child')
+            if not addr_el:
+                addr_el = item.css_first('.W4Efsd span[style*="direction"]')
+            if addr_el:
+                address = (addr_el.text or "").strip()
+        except Exception:
+            pass
+
+        # Maps URL
+        maps_url = ""
+        try:
+            link_el = item.css_first('a.hfpxzc, a[href*="/maps/place/"]')
+            if link_el:
+                maps_url = link_el.attrib.get("href", "")
+        except Exception:
+            pass
+
+        lat, lng = 0.0, 0.0
+        if maps_url:
+            lat, lng = self._extract_coords_from_url(maps_url)
+
+        return GoogleMapsResult(
+            name=name,
+            category=category,
+            address=address,
+            website="",
+            phone="",
+            rating=rating,
+            review_count=0,
+            opening_hours={},
+            latitude=lat,
+            longitude=lng,
+            google_maps_url=maps_url,
+            images=[],
+        )
+
+    def _parse_scrapling_details(self, page) -> Dict:
+        """Extract business details from a Scrapling-parsed Maps place page."""
+        details: Dict = {}
+
+        # Website
+        try:
+            el = page.css_first('[data-item-id="authority"]')
+            if el:
+                href = el.attrib.get("href", "")
+                if not href:
+                    a_el = el.css_first("a")
+                    if a_el:
+                        href = a_el.attrib.get("href", "")
+                if href and href.startswith("http"):
+                    details["website"] = href
+        except Exception:
+            pass
+
+        # Phone
+        try:
+            el = page.css_first('[data-item-id*="phone"]')
+            if el:
+                di = el.attrib.get("data-item-id", "")
+                phone_match = re.search(r'tel:(.+)', di)
+                if phone_match:
+                    details["phone"] = phone_match.group(1)
+                else:
+                    txt = (el.text or "").strip()
+                    if txt:
+                        details["phone"] = txt
+        except Exception:
+            pass
+
+        # Address
+        try:
+            el = page.css_first('[data-item-id="address"]')
+            if el:
+                txt = (el.text or "").strip()
+                if txt:
+                    details["address"] = txt
+        except Exception:
+            pass
+
+        # Review count
+        try:
+            body_text = page.css_first("body").text if page.css_first("body") else ""
+            review_match = re.search(r'([\d,]+)\s*reviews?', body_text, re.I)
+            if review_match:
+                details["review_count"] = int(review_match.group(1).replace(",", ""))
+        except Exception:
+            pass
+
+        # Opening hours
+        try:
+            el = page.css_first('[data-item-id="oh"]')
+            if el:
+                details["opening_hours"] = (el.text or "").strip()
+        except Exception:
+            pass
+
+        # Coordinates from page URL
+        page_url = page.url if hasattr(page, 'url') else ""
+        lat, lng = self._extract_coords_from_url(page_url)
+        if lat and lng:
+            details["latitude"] = lat
+            details["longitude"] = lng
+
+        return details
+
+    # ── Playwright scrape (fallback) ─────────────────────────────
 
     async def _search_playwright(
         self,
@@ -105,7 +389,7 @@ class GoogleMapsScraper:
             return []
 
         url = self._build_search_url(query, location, lat, lng)
-        logger.info(f"Google Maps search: {url}")
+        logger.info(f"Playwright Google Maps search: {url}")
 
         results: List[GoogleMapsResult] = []
         t0 = time.time()
@@ -124,7 +408,6 @@ class GoogleMapsScraper:
                     await context.add_init_script(self.STEALTH_JS)
                     page = await context.new_page()
 
-                    # ── load search page ──
                     try:
                         await page.goto(url, wait_until="domcontentloaded", timeout=self.PAGE_TIMEOUT_MS)
                     except Exception as e:
@@ -133,7 +416,6 @@ class GoogleMapsScraper:
 
                     await asyncio.sleep(3)
 
-                    # ── check for consent / cookie wall ──
                     try:
                         consent = await page.query_selector('button:has-text("Accept all")')
                         if consent:
@@ -144,13 +426,11 @@ class GoogleMapsScraper:
 
                     feed = await page.query_selector('[role="feed"]')
                     if not feed:
-                        logger.warning("No [role=feed] found — Maps may have blocked us or layout changed")
+                        logger.warning("No [role=feed] found")
                         return []
 
-                    # ── scroll to load results ──
                     for _ in range(self.SCROLL_ATTEMPTS):
                         if time.time() - t0 > self.OVERALL_TIMEOUT_S:
-                            logger.warning("Overall timeout reached during scroll")
                             break
                         items = await page.query_selector_all('[role="article"]')
                         if len(items) >= max_results:
@@ -161,34 +441,28 @@ class GoogleMapsScraper:
                         await asyncio.sleep(self.SCROLL_WAIT_S)
 
                     items = await page.query_selector_all('[role="article"]')
-                    logger.info(f"Found {len(items)} raw items in feed")
+                    logger.info(f"Playwright found {len(items)} raw items in feed")
 
-                    # ── parse feed items ──
                     for item in items[:max_results]:
                         if time.time() - t0 > self.OVERALL_TIMEOUT_S:
-                            logger.warning("Overall timeout during parsing")
                             break
                         try:
-                            result = await self._parse_item(item)
+                            result = await self._parse_playwright_item(item)
                             if result:
                                 results.append(result)
                         except Exception as e:
-                            logger.debug(f"Parse item error: {e}")
+                            logger.debug(f"Playwright parse item error: {e}")
 
-                    logger.info(f"Parsed {len(results)} results from feed")
-
-                    # ── enrich details in SAME browser context ──
                     enrich_count = min(len(results), self.MAX_DETAIL_ENRICH)
                     enriched = 0
                     for i in range(enrich_count):
                         if time.time() - t0 > self.OVERALL_TIMEOUT_S:
-                            logger.warning("Overall timeout during enrichment, returning partial results")
                             break
                         r = results[i]
                         if not r.google_maps_url:
                             continue
                         try:
-                            details = await self._get_details(context, r.google_maps_url)
+                            details = await self._get_playwright_details(context, r.google_maps_url)
                             if details:
                                 if details.get("website"):
                                     r.website = details["website"]
@@ -208,7 +482,7 @@ class GoogleMapsScraper:
                         except Exception as e:
                             logger.debug(f"Enrich failed for {r.name}: {e}")
 
-                    logger.info(f"Enriched {enriched}/{enrich_count} detail pages")
+                    logger.info(f"Playwright enriched {enriched}/{enrich_count} detail pages")
 
                 finally:
                     await browser.close()
@@ -216,7 +490,6 @@ class GoogleMapsScraper:
         except Exception as e:
             logger.error(f"Playwright search failed: {e}")
 
-        # ── extract coordinates from Maps URLs if still zero ──
         for r in results:
             if not r.latitude or r.latitude == 0:
                 lat_e, lng_e = self._extract_coords_from_url(r.google_maps_url)
@@ -224,123 +497,77 @@ class GoogleMapsScraper:
                     r.latitude = lat_e
                     r.longitude = lng_e
 
-        # ── apply filters ──
         if min_rating > 0:
             results = [r for r in results if r.rating >= min_rating]
         if min_reviews > 0:
             results = [r for r in results if r.review_count >= min_reviews]
 
-        logger.info(f"Final: {len(results)} results (after filters)")
+        logger.info(f"Playwright final: {len(results)} results")
         return results[:max_results]
 
-    # ── build URL ─────────────────────────────────────────────────
-
-    def _build_search_url(self, query: str, location: str, lat: float, lng: float) -> str:
-        if lat and lng:
-            return f"{self.BASE_URL}{quote_plus(query)}/@{lat},{lng},14z"
-        search = f"{query} {location}".strip()
-        return f"{self.BASE_URL}{quote_plus(search)}"
-
-    # ── parse a single feed item ──────────────────────────────────
-
-    async def _parse_item(self, item) -> Optional[GoogleMapsResult]:
-        try:
-            # Name: try aria-label first, then .qBF1Pd, then .fontHeadlineSmall
-            name = await item.get_attribute("aria-label") or ""
-            if not name:
-                for sel in [".qBF1Pd", ".fontHeadlineSmall", "a.hfpxzc span"]:
-                    el = await item.query_selector(sel)
-                    if el:
-                        name = await el.inner_text()
-                        if name.strip():
-                            break
-            if not name or not name.strip():
-                return None
-            name = name.strip()
-
-            # Rating: .MW4etd has the numeric rating
-            rating = 0.0
-            for sel in [".MW4etd", ".ZkP5Je"]:
+    async def _parse_playwright_item(self, item) -> Optional[GoogleMapsResult]:
+        name = await item.get_attribute("aria-label") or ""
+        if not name:
+            for sel in [".qBF1Pd", ".fontHeadlineSmall", "a.hfpxzc span"]:
                 el = await item.query_selector(sel)
                 if el:
-                    try:
-                        txt = await el.inner_text()
-                        nums = re.search(r'[\d.]+', txt)
-                        if nums:
-                            rating = float(nums.group())
-                            break
-                    except Exception:
-                        pass
-
-            # Review count: Google Maps feed NO LONGER shows review counts.
-            # Only ratings are shown in the feed. Reviews are on detail page.
-            review_count = 0
-
-            # Category: first span inside .W4Efsd
-            category = ""
-            cat_el = await item.query_selector(".W4Efsd span:first-child")
-            if cat_el:
-                category = self._clean_text(await cat_el.inner_text())
-
-            # Address: last span inside .W4Efsd
-            address = ""
-            addr_el = await item.query_selector(".W4Efsd .W4Efsd span:last-child")
-            if not addr_el:
-                addr_el = await item.query_selector(".W4Efsd span[style*='direction']")
-            if addr_el:
-                address = self._clean_text(await addr_el.inner_text())
-
-            # Maps URL
-            link_el = await item.query_selector("a.hfpxzc, a[href*='/maps/place/']")
-            maps_url = await link_el.get_attribute("href") if link_el else ""
-
-            # Extract coords from URL
-            lat, lng = 0.0, 0.0
-            if maps_url:
-                lat, lng = self._extract_coords_from_url(maps_url)
-
-            return GoogleMapsResult(
-                name=name,
-                category=category.strip(),
-                address=address.strip(),
-                website="",
-                phone="",
-                rating=rating,
-                review_count=review_count,
-                opening_hours={},
-                latitude=lat,
-                longitude=lng,
-                google_maps_url=maps_url,
-                images=[],
-            )
-        except Exception as e:
-            logger.debug(f"Error parsing Maps item: {e}")
+                    name = await el.inner_text()
+                    if name.strip():
+                        break
+        if not name or not name.strip():
             return None
+        name = name.strip()
 
-    # ── extract coordinates from Maps URL ─────────────────────────
+        rating = 0.0
+        for sel in [".MW4etd", ".ZkP5Je"]:
+            el = await item.query_selector(sel)
+            if el:
+                try:
+                    txt = await el.inner_text()
+                    nums = re.search(r'[\d.]+', txt)
+                    if nums:
+                        rating = float(nums.group())
+                        break
+                except Exception:
+                    pass
 
-    @staticmethod
-    def _extract_coords_from_url(url: str) -> Tuple[float, float]:
-        """Extract lat/lng from a Google Maps URL."""
-        if not url:
-            return 0.0, 0.0
+        review_count = 0
 
-        # Format 1: @lat,lng,zoom
-        m = re.search(r'@(-?\d+\.?\d*),(-?\d+\.?\d*)', url)
-        if m:
-            return float(m.group(1)), float(m.group(2))
+        category = ""
+        cat_el = await item.query_selector(".W4Efsd span:first-child")
+        if cat_el:
+            category = self._clean_text(await cat_el.inner_text())
 
-        # Format 2: !3dlat!4dlng
-        m = re.search(r'!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)', url)
-        if m:
-            return float(m.group(1)), float(m.group(2))
+        address = ""
+        addr_el = await item.query_selector(".W4Efsd .W4Efsd span:last-child")
+        if not addr_el:
+            addr_el = await item.query_selector(".W4Efsd span[style*='direction']")
+        if addr_el:
+            address = self._clean_text(await addr_el.inner_text())
 
-        return 0.0, 0.0
+        link_el = await item.query_selector("a.hfpxzc, a[href*='/maps/place/']")
+        maps_url = await link_el.get_attribute("href") if link_el else ""
 
-    # ── get details from a place page ─────────────────────────────
+        lat, lng = 0.0, 0.0
+        if maps_url:
+            lat, lng = self._extract_coords_from_url(maps_url)
 
-    async def _get_details(self, context, google_maps_url: str) -> Optional[Dict]:
-        """Get business details from a Maps place page using an EXISTING browser context."""
+        return GoogleMapsResult(
+            name=name,
+            category=category.strip(),
+            address=address.strip(),
+            website="",
+            phone="",
+            rating=rating,
+            review_count=review_count,
+            opening_hours={},
+            latitude=lat,
+            longitude=lng,
+            google_maps_url=maps_url,
+            images=[],
+        )
+
+    async def _get_playwright_details(self, context, google_maps_url: str) -> Optional[Dict]:
         page = None
         try:
             page = await context.new_page()
@@ -349,24 +576,19 @@ class GoogleMapsScraper:
 
             details: Dict = {}
 
-            # Website — data-item-id="authority" (any element type)
             el = await page.query_selector('[data-item-id="authority"]')
             if el:
                 href = await el.get_attribute("href") or ""
                 if not href:
-                    # The href might be on a child <a> element
                     a_el = await el.query_selector("a")
                     if a_el:
                         href = await a_el.get_attribute("href") or ""
                 if href and href.startswith("http"):
                     details["website"] = href
 
-            # Phone — data-item-id contains "phone" (any element type)
-            # The phone number is often IN the data-item-id: "phone:tel:+97142756731"
             el = await page.query_selector('[data-item-id*="phone"]')
             if el:
                 di = await el.get_attribute("data-item-id") or ""
-                # Extract phone from data-item-id: "phone:tel:+97142756731"
                 phone_match = re.search(r'tel:(.+)', di)
                 if phone_match:
                     details["phone"] = phone_match.group(1)
@@ -375,25 +597,21 @@ class GoogleMapsScraper:
                     if txt:
                         details["phone"] = txt
 
-            # Address — data-item-id="address"
             el = await page.query_selector('[data-item-id="address"]')
             if el:
                 txt = self._clean_text(await el.inner_text())
                 if txt:
                     details["address"] = txt
 
-            # Review count — look in body text for "N reviews"
             body_text = await page.inner_text("body")
             review_match = re.search(r'([\d,]+)\s*reviews?', body_text, re.I)
             if review_match:
                 details["review_count"] = int(review_match.group(1).replace(",", ""))
 
-            # Opening hours
             el = await page.query_selector('[data-item-id="oh"]')
             if el:
                 details["opening_hours"] = await el.inner_text()
 
-            # Coordinates from page URL
             page_url = page.url
             lat, lng = self._extract_coords_from_url(page_url)
             if lat and lng:
@@ -503,6 +721,27 @@ class GoogleMapsScraper:
         return results[:max_results]
 
     # ── helpers ───────────────────────────────────────────────────
+
+    def _build_search_url(self, query: str, location: str, lat: float, lng: float) -> str:
+        if lat and lng:
+            return f"{self.BASE_URL}{quote_plus(query)}/@{lat},{lng},14z"
+        search = f"{query} {location}".strip()
+        return f"{self.BASE_URL}{quote_plus(search)}"
+
+    @staticmethod
+    def _extract_coords_from_url(url: str) -> Tuple[float, float]:
+        if not url:
+            return 0.0, 0.0
+
+        m = re.search(r'@(-?\d+\.?\d*),(-?\d+\.?\d*)', url)
+        if m:
+            return float(m.group(1)), float(m.group(2))
+
+        m = re.search(r'!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)', url)
+        if m:
+            return float(m.group(1)), float(m.group(2))
+
+        return 0.0, 0.0
 
     @staticmethod
     def _clean_text(text: str) -> str:
