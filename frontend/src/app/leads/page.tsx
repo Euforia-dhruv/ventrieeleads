@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Search, Users, ArrowUpRight, Phone, Mail, Globe, ArrowUpDown, Loader2, Download, X, MessageSquare, Link2, ExternalLink } from 'lucide-react';
+import { Search, Users, Phone, Mail, Globe, ArrowUpDown, Loader2, Download, X, MessageSquare, Link2, ExternalLink } from 'lucide-react';
 import { cn, getScoreColor, statusColors } from '@/lib/utils';
 
 interface Lead {

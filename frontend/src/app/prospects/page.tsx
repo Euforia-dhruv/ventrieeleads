@@ -5,16 +5,12 @@ import Link from 'next/link';
 import {
   Trophy,
   Filter,
-  X,
   Star,
   Globe,
   Mail,
   Phone,
   MapPin,
-  TrendingUp,
   Loader2,
-  ArrowUpDown,
-  ExternalLink,
 } from 'lucide-react';
 import { cn, getScoreColor } from '@/lib/utils';
 
@@ -70,10 +66,6 @@ export default function ProspectsPage() {
   const [sortBy, setSortBy] = useState('score_desc');
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    fetchProspects();
-  }, []);
-
   const fetchProspects = async () => {
     setLoading(true);
     try {
@@ -86,6 +78,10 @@ export default function ProspectsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchProspects();
+  }, []);
 
   const filteredProspects = prospects
     .filter((p) => {

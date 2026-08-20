@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Mail, MessageSquare, Link2, Camera, Copy, Check, Loader2,
-  Send, Clock, ArrowLeft, Edit3, Save, ExternalLink, Phone, Globe,
-  Building2, AlertTriangle, Sparkles, ChevronDown
+  ArrowLeft, Save, ExternalLink, Phone, Globe,
+  Building2, AlertTriangle, Sparkles
 } from 'lucide-react';
 import Link from 'next/link';
 
