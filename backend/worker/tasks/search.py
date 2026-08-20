@@ -1,6 +1,7 @@
 """Search task — discovers businesses from providers with deduplication, geocoding, and chained processing."""
 import asyncio
 import logging
+import math
 import time
 from datetime import datetime
 from worker.celery_app import app
@@ -13,12 +14,46 @@ logger = logging.getLogger(__name__)
 SEARCH_HARD_TIMEOUT = 240
 
 
-def _update_progress(db, job, progress: int, message: str):
+def _update_progress(db, job, progress: int, message: str, stage: str = None, **counters):
     job.progress = progress
     meta = job.extra_data or {}
     meta["progress_message"] = message
     job.extra_data = meta
+    if stage:
+        job.progress_stage = stage
+    for field, val in counters.items():
+        if hasattr(job, field):
+            setattr(job, field, val)
     db.commit()
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Return distance in km between two lat/lng points."""
+    R = 6371.0
+    d_lat = math.radians(lat2 - lat1)
+    d_lon = math.radians(lon2 - lon1)
+    a = (math.sin(d_lat / 2) ** 2 +
+         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+         math.sin(d_lon / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _filter_by_radius(results, lat: float, lng: float, radius_km: float):
+    """Filter results to only those within radius_km of the center point."""
+    if not lat or not lng or not radius_km or radius_km <= 0:
+        return results
+    filtered = []
+    for r in results:
+        r_lat = getattr(r, 'latitude', 0) or 0
+        r_lng = getattr(r, 'longitude', 0) or 0
+        if not r_lat or not r_lng:
+            filtered.append(r)
+            continue
+        dist = _haversine_km(lat, lng, r_lat, r_lng)
+        if dist <= radius_km:
+            filtered.append(r)
+    logger.info(f"Radius filter ({radius_km}km from {lat},{lng}): {len(results)} → {len(filtered)} results")
+    return filtered
 
 
 @app.task(bind=True, name="worker.tasks.search.discover_businesses")
@@ -44,12 +79,13 @@ def discover_businesses(self, job_id: str):
 
             location = f"{job.area or ''} {job.city or ''} {job.country or ''}".strip()
 
-            _update_progress(db, job, 5, "Parsing search query...")
+            _update_progress(db, job, 5, "Parsing search query...", stage="parsing")
             extra = job.extra_data or {}
             provider_slug = extra.get("provider", "google_maps")
             lat = extra.get("lat")
             lng = extra.get("lng")
             radius_km = extra.get("radius_km")
+            search_area = extra.get("search_area")
 
             if not query and not location:
                 query = job.query or ""
@@ -66,26 +102,34 @@ def discover_businesses(self, job_id: str):
                         provider_slug = hint
                 job.extra_data = {**(job.extra_data or {}), "smart_parse": parsed.to_dict()}
 
-            _update_progress(db, job, 10, f"Searching for '{query}' in {location or 'any location'}...")
+            requested = job.max_results or 50
+            _update_progress(db, job, 10, f"Searching for '{query}' in {location or 'any location'}...", stage="searching",
+                           requested_count=requested, discovered_count=0, processed_count=0, qualified_count=0, failed_count=0)
 
-            # Run search with timeout guard
             results = _run_search_with_timeout(
                 provider_slug=provider_slug,
                 query=query,
                 location=location,
-                max_results=job.max_results or 50,
+                max_results=requested,
                 min_rating=job.min_rating or 0,
                 min_reviews=job.min_reviews or 0,
                 lat=float(lat) if lat is not None else None,
                 lng=float(lng) if lng is not None else None,
                 radius_km=float(radius_km or 10),
+                search_area=search_area,
                 timeout=SEARCH_HARD_TIMEOUT - (time.time() - t0),
             )
 
-            _update_progress(db, job, 30, f"Found {len(results)} businesses. Storing and deduplicating...")
+            if lat and lng and radius_km:
+                results = _filter_by_radius(results, float(lat), float(lng), float(radius_km))
+
+            discovered = len(results)
+            _update_progress(db, job, 30, f"Found {discovered} businesses. Storing and deduplicating...", stage="discovering",
+                           discovered_count=discovered)
 
             stored_count = 0
             duplicate_count = 0
+            failed_count = 0
 
             for result in results:
                 try:
@@ -94,10 +138,11 @@ def discover_businesses(self, job_id: str):
                 except Exception as e:
                     logger.debug(f"Failed to store {result.name}: {e}")
                     duplicate_count += 1
+                    failed_count += 1
 
-            _update_progress(db, job, 70, f"Stored {stored_count} new companies. Geocoding...")
+            _update_progress(db, job, 50, f"Stored {stored_count} new companies. Enriching...", stage="enriching",
+                           processed_count=stored_count, failed_count=failed_count)
 
-            # Geocode companies with zero coordinates
             new_company_ids = [
                 sr.company_id for sr in db.query(SearchResult).filter(
                     SearchResult.search_job_id == job.id,
@@ -128,25 +173,33 @@ def discover_businesses(self, job_id: str):
                 db.flush()
                 logger.info(f"Geocoded {geocoded}/{len(new_companies)} companies")
 
+            _update_progress(db, job, 70, f"Scraping {stored_count} websites...", stage="auditing",
+                           processed_count=stored_count)
+
             job.results_count = stored_count
+            qualified = stored_count - failed_count
             job.status = JobStatus.COMPLETED.value
             job.progress = 100
             job.completed_at = datetime.utcnow()
             meta = job.extra_data or {}
-            meta["progress_message"] = f"Completed! {stored_count} new companies found."
+            meta["progress_message"] = f"Completed! {stored_count} leads found."
             meta["stats"] = {
-                "total_results": len(results),
+                "requested": requested,
+                "total_results": discovered,
                 "new_companies": stored_count,
                 "duplicates": duplicate_count,
+                "failed": failed_count,
+                "qualified": qualified,
                 "geocoded": geocoded,
                 "elapsed_s": round(time.time() - t0, 1),
             }
             job.extra_data = meta
+            job.qualified_count = qualified
+            job.progress_stage = "completed"
             db.commit()
 
-            logger.info(f"Search job {job_id} completed: {stored_count} new companies (from {len(results)} total)")
+            logger.info(f"Search job {job_id} completed: {stored_count} new companies (from {discovered} total)")
 
-            # Dispatch processing for new companies (chained: scrape → audit → score)
             new_results = db.query(SearchResult).filter(
                 SearchResult.search_job_id == job.id,
                 SearchResult.is_duplicate == False
@@ -170,6 +223,7 @@ def discover_businesses(self, job_id: str):
             job.status = JobStatus.FAILED.value
             job.error_message = str(e)[:1000]
             job.completed_at = datetime.utcnow()
+            job.progress_stage = "failed"
             db.commit()
 
             if (job.extra_data or {}).get("campaign_job_id"):
@@ -191,6 +245,7 @@ def _run_search_with_timeout(
     lat: float = None,
     lng: float = None,
     radius_km: float = 10,
+    search_area: dict = None,
     timeout: float = SEARCH_HARD_TIMEOUT,
 ) -> list:
     """Run provider search with an overall timeout guard."""
@@ -200,6 +255,8 @@ def _run_search_with_timeout(
             kwargs["lat"] = lat
             kwargs["lng"] = lng
             kwargs["radius_km"] = radius_km
+        if search_area:
+            kwargs["search_area"] = search_area
 
         provider = registry.get(provider_slug)
         if not provider:
@@ -239,7 +296,6 @@ def _store_result(db, job, result, provider_slug: str, stored: int, dupes: int):
     dedup_key = result.dedup_key()
     existing = None
 
-    # Dedup by website
     if result.website:
         clean_website = result.website.lower().rstrip('/').replace('https://', '').replace('http://', '').replace('www.', '')
         existing = db.query(Company).filter(
@@ -247,7 +303,6 @@ def _store_result(db, job, result, provider_slug: str, stored: int, dupes: int):
             Company.is_deleted == False
         ).first()
 
-    # Dedup by phone
     if not existing and result.phone:
         import re as _re
         phone_digits = _re.sub(r'[^\d]', '', result.phone)
@@ -265,14 +320,12 @@ def _store_result(db, job, result, provider_slug: str, stored: int, dupes: int):
                         existing = db.query(Company).get(cid)
                         break
 
-    # Dedup by Google Maps URL
     if not existing and result.google_maps_url:
         existing = db.query(Company).filter(
             Company.google_maps_url == result.google_maps_url,
             Company.is_deleted == False
         ).first()
 
-    # Dedup by name
     if not existing:
         existing = db.query(Company).filter(
             Company.name == result.name,
@@ -280,7 +333,6 @@ def _store_result(db, job, result, provider_slug: str, stored: int, dupes: int):
         ).first()
 
     if existing:
-        # Update existing company with new data if it's better
         updated = False
         if result.phone and not existing.phone:
             existing.phone = result.phone

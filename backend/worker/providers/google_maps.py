@@ -40,7 +40,8 @@ class GoogleMapsProvider(BaseProvider):
             min_rating=min_rating,
             min_reviews=min_reviews,
             lat=kwargs.get("lat", 0),
-            lng=kwargs.get("lng", 0)
+            lng=kwargs.get("lng", 0),
+            radius_km=kwargs.get("radius_km", 0),
         )
 
         return [self._normalize_gm(r) for r in results]
@@ -59,7 +60,7 @@ class GoogleMapsProvider(BaseProvider):
         results = await google_maps_scraper.search(
             query=query, location=f"{lat},{lng}",
             max_results=max_results, min_rating=min_rating, min_reviews=min_reviews,
-            lat=lat, lng=lng
+            lat=lat, lng=lng, radius_km=radius_km,
         )
         return [self._normalize_gm(r) for r in results]
 

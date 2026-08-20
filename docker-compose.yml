@@ -364,6 +364,7 @@ services:
       - ./backend/phase7_migration.sql:/docker-entrypoint-initdb.d/15-phase7.sql
       - ./backend/migration_performance.sql:/docker-entrypoint-initdb.d/16-performance.sql
       - ./backend/migration_crm_backfill.sql:/docker-entrypoint-initdb.d/17-crm-backfill.sql
+      - ./backend/migration_search_area_progress.sql:/docker-entrypoint-initdb.d/18-search-area-progress.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U leads -d leads"]
       interval: 10s

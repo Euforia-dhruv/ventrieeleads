@@ -69,16 +69,17 @@ class GoogleMapsScraper:
     async def search(
         self,
         query: str,
-        location: str = "Dubai, UAE",
+        location: str = "",
         max_results: int = 50,
         min_rating: float = 0,
         min_reviews: int = 0,
         lat: float = 0,
         lng: float = 0,
+        radius_km: float = 0,
     ) -> List[GoogleMapsResult]:
         # Try Scrapling first (fastest, anti-bot bypass)
         results = await self._search_scrapling(
-            query, location, max_results, min_rating, min_reviews, lat, lng
+            query, location, max_results, min_rating, min_reviews, lat, lng, radius_km
         )
         if results:
             return results
@@ -86,7 +87,7 @@ class GoogleMapsScraper:
         # Fallback to Playwright
         logger.info("Scrapling returned 0 results, trying Playwright fallback")
         results = await self._search_playwright(
-            query, location, max_results, min_rating, min_reviews, lat, lng
+            query, location, max_results, min_rating, min_reviews, lat, lng, radius_km
         )
         if results:
             return results
@@ -109,6 +110,7 @@ class GoogleMapsScraper:
         min_reviews: float,
         lat: float = 0,
         lng: float = 0,
+        radius_km: float = 0,
     ) -> List[GoogleMapsResult]:
         """Scrape Google Maps using Scrapling's StealthyFetcher (anti-bot bypass)."""
         try:
@@ -117,7 +119,7 @@ class GoogleMapsScraper:
             logger.warning("Scrapling not installed, skipping")
             return []
 
-        url = self._build_search_url(query, location, lat, lng)
+        url = self._build_search_url(query, location, lat, lng, radius_km)
         logger.info(f"Scrapling Google Maps search: {url}")
 
         results: List[GoogleMapsResult] = []
@@ -381,6 +383,7 @@ class GoogleMapsScraper:
         min_reviews: float,
         lat: float = 0,
         lng: float = 0,
+        radius_km: float = 0,
     ) -> List[GoogleMapsResult]:
         try:
             from playwright.async_api import async_playwright
@@ -388,7 +391,7 @@ class GoogleMapsScraper:
             logger.warning("Playwright not installed")
             return []
 
-        url = self._build_search_url(query, location, lat, lng)
+        url = self._build_search_url(query, location, lat, lng, radius_km)
         logger.info(f"Playwright Google Maps search: {url}")
 
         results: List[GoogleMapsResult] = []
@@ -722,9 +725,15 @@ class GoogleMapsScraper:
 
     # ── helpers ───────────────────────────────────────────────────
 
-    def _build_search_url(self, query: str, location: str, lat: float, lng: float) -> str:
+    def _build_search_url(self, query: str, location: str, lat: float, lng: float, radius_km: float = 0) -> str:
         if lat and lng:
-            return f"{self.BASE_URL}{quote_plus(query)}/@{lat},{lng},14z"
+            # Compute zoom level from radius: ~zoom 14 for 1km, ~zoom 10 for 20km, ~zoom 8 for 100km
+            import math
+            if radius_km > 0:
+                zoom = max(8, min(17, round(14 - math.log2(max(0.5, radius_km) / 1.5))))
+            else:
+                zoom = 14
+            return f"{self.BASE_URL}{quote_plus(query)}/@{lat},{lng},{zoom}z"
         search = f"{query} {location}".strip()
         return f"{self.BASE_URL}{quote_plus(search)}"
 

@@ -17,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark">
       <head>
+        {/* eslint-disable-next-line @next/next/no-css-tags -- pre-built Tailwind CSS for Vercel deployment */}
         <link rel="stylesheet" href="/tailwind.css" />
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>

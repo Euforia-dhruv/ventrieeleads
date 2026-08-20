@@ -21,6 +21,7 @@ export async function createSearchJob(req: Request, res: Response): Promise<void
       lat,
       lng,
       radius_km = 10,
+      search_area,
     } = req.body;
 
     if (!query && !industry && !keyword) {
@@ -30,6 +31,8 @@ export async function createSearchJob(req: Request, res: Response): Promise<void
       });
       return;
     }
+
+    const clampedMax = Math.min(Math.max(1, Number(max_results) || 50), 1000);
 
     const searchQuery = query || `${industry} ${keyword}`.trim();
     const finalCity = city || (location ? location.trim() : '');
@@ -43,14 +46,17 @@ export async function createSearchJob(req: Request, res: Response): Promise<void
       metadata.lng = Number(lng);
       metadata.radius_km = Number(radius_km) || 10;
     }
+    if (search_area && typeof search_area === 'object') {
+      metadata.search_area = search_area;
+    }
 
     const jobId = uuidv4();
     const pool = getPool();
 
     const result = await pool.query(
       `
-      INSERT INTO search_jobs (id, query, country, city, area, industry, keyword, min_rating, min_reviews, max_results, status, metadata)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'queued', $11::jsonb)
+      INSERT INTO search_jobs (id, query, country, city, area, industry, keyword, min_rating, min_reviews, max_results, status, metadata, requested_count, progress_stage)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'queued', $11::jsonb, $12, 'queued')
       RETURNING *
     `,
       [
@@ -63,13 +69,15 @@ export async function createSearchJob(req: Request, res: Response): Promise<void
         keyword,
         min_rating,
         min_reviews,
-        max_results,
+        clampedMax,
         JSON.stringify(metadata),
+        clampedMax,
       ],
     );
 
     const job = result.rows[0];
 
+    let taskEnqueued = false;
     try {
       const enqueuerUrl = process.env.TASK_ENQUEUER_URL || 'http://task-enqueuer:8002';
       await axios.post(`${enqueuerUrl}/enqueue`, {
@@ -77,10 +85,11 @@ export async function createSearchJob(req: Request, res: Response): Promise<void
         args: [jobId],
         kwargs: {},
         queue: 'search',
-      });
+      }, { timeout: 5000 });
+      taskEnqueued = true;
       logger.info(`Search job ${jobId} queued successfully`);
     } catch (err) {
-      logger.warn(`Could not enqueue task, Celery worker may not be running: ${err}`);
+      logger.warn(`Could not enqueue task (worker may be starting up): ${err}`);
     }
 
     res.status(201).json({
@@ -97,10 +106,18 @@ export async function createSearchJob(req: Request, res: Response): Promise<void
         status: job.status,
         progress: job.progress,
         results_count: job.results_count,
+        requested_count: job.requested_count || clampedMax,
+        discovered_count: job.discovered_count || 0,
+        processed_count: job.processed_count || 0,
+        qualified_count: job.qualified_count || 0,
+        failed_count: job.failed_count || 0,
+        progress_stage: job.progress_stage || 'queued',
         created_at: job.created_at,
         lat: metadata.lat ?? null,
         lng: metadata.lng ?? null,
         radius_km: metadata.radius_km ?? null,
+        search_area: metadata.search_area ?? null,
+        task_enqueued: taskEnqueued,
       },
     });
   } catch (error) {
@@ -157,7 +174,12 @@ export async function listSearchJobs(req: Request, res: Response): Promise<void>
 export async function getSearchJob(req: Request, res: Response): Promise<void> {
   try {
     const pool = getPool();
-    const { id } = req.params;
+    const id = req.params.id as string;
+
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
+      res.status(400).json({ success: false, message: 'Invalid job ID format' });
+      return;
+    }
 
     const result = await pool.query('SELECT * FROM search_jobs WHERE id = $1', [id]);
 
@@ -218,7 +240,7 @@ export async function getSearchJob(req: Request, res: Response): Promise<void> {
 export async function cancelSearchJob(req: Request, res: Response): Promise<void> {
   try {
     const pool = getPool();
-    const { id } = req.params;
+    const id = req.params.id as string;
 
     const result = await pool.query(
       `UPDATE search_jobs SET status = 'cancelled', completed_at = NOW(), updated_at = NOW()

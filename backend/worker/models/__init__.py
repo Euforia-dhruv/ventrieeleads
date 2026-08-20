@@ -296,6 +296,12 @@ class SearchJob(BaseModel):
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
     extra_data = Column("metadata", JSONB, default=dict)
+    requested_count = Column(Integer, default=0)
+    discovered_count = Column(Integer, default=0)
+    processed_count = Column(Integer, default=0)
+    qualified_count = Column(Integer, default=0)
+    failed_count = Column(Integer, default=0)
+    progress_stage = Column(String(50), default="queued")
 
     workspace = relationship("Workspace", back_populates="search_jobs")
     results = relationship("SearchResult", back_populates="search_job")

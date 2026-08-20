@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Trophy,
   Filter,
@@ -239,7 +240,7 @@ export default function ProspectsPage() {
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-10 h-10 rounded-lg bg-white/[0.04] flex items-center justify-center text-[14px] font-bold text-white/20 shrink-0">
                     {prospect.logo_url ? (
-                      <img src={prospect.logo_url} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                      <Image src={prospect.logo_url} alt="" width={40} height={40} unoptimized className="w-10 h-10 rounded-lg object-cover" />
                     ) : (
                       prospect.company_name?.charAt(0) || '?'
                     )}
