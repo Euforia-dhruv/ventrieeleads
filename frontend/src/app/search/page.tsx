@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { Search, Zap, Globe, Building2, Phone, Mail, Link2, Filter, X, Loader2, AlertCircle, MapPin, Star } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Search, Zap, Globe, Building2, Phone, Mail, Link2, Filter, X, Loader2, AlertCircle, MapPin, Star, Radar } from 'lucide-react';
 import SearchMap, { type SearchArea } from '@/components/search/SearchMap';
 import ResultCard from '@/components/search/ResultCard';
 import SearchProgress from '@/components/search/SearchProgress';
@@ -39,18 +39,7 @@ interface FilterState {
   hasSocial: boolean;
 }
 
-const EXAMPLES = [
-  'Dentists near London',
-  'Hotels in Dubai Marina',
-  'Construction companies in Sydney',
-  'Law firms in Toronto',
-  'Restaurants near Eiffel Tower',
-  'Solar companies Germany',
-  'Auto workshops Bangalore',
-  'Marketing agencies New York',
-];
-
-const LEAD_COUNTS = [10, 25, 50, 100, 250, 500];
+const LEAD_COUNTS = [10, 20, 50, 100, 250];
 
 export default function SearchPage() {
   const [query, setQuery] = useState('');
@@ -62,12 +51,9 @@ export default function SearchPage() {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [searchArea, setSearchArea] = useState<SearchArea | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [progressMessage, setProgressMessage] = useState('');
   const [searchError, setSearchError] = useState('');
-  const [maxResults, setMaxResults] = useState(50);
-  const [customCount, setCustomCount] = useState('');
-  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [maxResults, setMaxResults] = useState(20);
   const [sortBy, setSortBy] = useState<'score' | 'rating' | 'reviews' | 'newest'>('score');
   const [filters, setFilters] = useState<FilterState>({
     temperature: 'all',
@@ -78,7 +64,6 @@ export default function SearchPage() {
     hasSocial: false,
   });
 
-  const inputRef = useRef<HTMLInputElement>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   useEffect(() => {
@@ -87,53 +72,28 @@ export default function SearchPage() {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [selectedResult?.id]);
 
-  useEffect(() => {
-    const saved = localStorage.getItem('recentSearches');
-    if (saved) setRecentSearches(JSON.parse(saved));
-    inputRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === '/' && !(e.metaKey || e.ctrlKey) && document.activeElement?.tagName !== 'INPUT') {
-        e.preventDefault();
-        inputRef.current?.focus();
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, []);
-
-  const effectiveMaxResults = showCustomInput ? (parseInt(customCount) || 50) : maxResults;
-
-  const handleSearch = async () => {
-    if (!query.trim()) return;
-
+  const doSearch = useCallback(async (searchQuery: string, area: SearchArea | null, count: number) => {
     setSearching(true);
     setHasSearched(true);
     setProgress(0);
     setResults([]);
     setSelectedResult(null);
     setSearchError('');
-    setProgressMessage('Connecting to search service...');
-
-    const updated = [query, ...recentSearches.filter((s) => s !== query)].slice(0, 5);
-    setRecentSearches(updated);
-    localStorage.setItem('recentSearches', JSON.stringify(updated));
+    setProgressMessage(area ? `Discovering businesses in ${count} km radius...` : 'Searching...');
 
     try {
       const res = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: query.trim(),
-          max_results: effectiveMaxResults,
-          ...(searchArea
+          query: searchQuery || 'businesses',
+          max_results: count,
+          ...(area
             ? {
-                lat: searchArea.lat,
-                lng: searchArea.lng,
-                radius_km: Math.round(searchArea.radiusKm),
-                search_area: { lat: searchArea.lat, lng: searchArea.lng, radius_km: searchArea.radiusKm },
+                lat: area.lat,
+                lng: area.lng,
+                radius_km: Math.round(area.radiusKm),
+                search_area: { lat: area.lat, lng: area.lng, radius_km: area.radiusKm },
               }
             : {}),
         }),
@@ -159,7 +119,7 @@ export default function SearchPage() {
     } finally {
       setSearching(false);
     }
-  };
+  }, []);
 
   const pollJobResults = async (jobId: string) => {
     let consecutiveErrors = 0;
@@ -174,34 +134,21 @@ export default function SearchPage() {
           if (job.results && job.results.length > 0) {
             setResults(job.results);
           }
-          const msg = job.metadata?.progress_message || '';
-          if (msg) setProgressMessage(msg);
 
-          const stage = job.progress_stage || 'queued';
-          const discovered = job.discovered_count || 0;
-          const processed = job.processed_count || 0;
-          const requested = job.requested_count || job.max_results || 50;
+          const stage = job.progress_stage || job.status || 'queued';
+          const pct = job.progress || 0;
 
-          let pct = job.progress || 0;
-          if (stage === 'parsing') pct = Math.max(pct, 5);
-          else if (stage === 'searching') pct = Math.max(pct, 10);
-          else if (stage === 'discovering') pct = Math.max(pct, 20 + Math.min(20, (discovered / Math.max(1, requested)) * 20));
-          else if (stage === 'enriching') pct = Math.max(pct, 45 + Math.min(15, (processed / Math.max(1, discovered)) * 15));
-          else if (stage === 'auditing') pct = Math.max(pct, 65 + Math.min(15, (processed / Math.max(1, discovered)) * 15));
-          else if (stage === 'completed') pct = 100;
-          else if (stage === 'failed') pct = 100;
+          if (stage === 'searching' || stage === 'queued') setProgressMessage('Scraping Google Maps...');
+          else if (stage === 'enriching') setProgressMessage('Enriching business data...');
+          else if (stage === 'auditing') setProgressMessage('Analyzing websites...');
+          else setProgressMessage('Processing...');
 
           setProgress(Math.min(95, pct));
 
           if (job.status === 'completed') {
             setResults(job.results || []);
             setProgress(100);
-            const stats = job.metadata?.stats;
-            if (stats) {
-              setProgressMessage(`Done! ${stats.new_companies} new leads from ${stats.total_results} found (${stats.duplicates} duplicates skipped)`);
-            } else {
-              setProgressMessage(`Done! ${job.results?.length || 0} companies found.`);
-            }
+            setProgressMessage(`Done! ${job.results?.length || 0} businesses found.`);
             return;
           }
           if (job.status === 'failed') {
@@ -209,23 +156,28 @@ export default function SearchPage() {
             return;
           }
         } else if (res.status === 404) {
-          setProgressMessage('Job not found — it may still be starting up...');
+          setProgressMessage('Job still starting...');
         }
       } catch {
         consecutiveErrors++;
         if (consecutiveErrors >= 5) {
-          setSearchError('Lost connection to the server. The search may still be running — try refreshing.');
+          setSearchError('Lost connection to the server.');
           return;
         }
       }
     }
-    setSearchError('Search timed out. Try a smaller result count or different query.');
+    setSearchError('Search timed out.');
   };
+
+  const handleAreaSelected = useCallback((area: SearchArea) => {
+    setSearchArea(area);
+    doSearch(query, area, maxResults);
+  }, [query, maxResults, doSearch]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSearch();
+      doSearch(query, searchArea, maxResults);
     }
   };
 
@@ -257,51 +209,39 @@ export default function SearchPage() {
 
   return (
     <div className="h-screen flex flex-col bg-[hsl(224,71%,4%)]">
-      {/* Top search bar */}
+      {/* Top bar */}
       <div className="shrink-0 border-b border-white/[0.04]">
         <div className="max-w-[1800px] mx-auto px-4 py-3">
           <div className="flex items-center gap-3">
-            {/* Search input */}
+            {/* Optional search input */}
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(215,20%,45%)]" />
               <input
-                ref={inputRef}
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
-                aria-label="Search for a business"
-                placeholder='What are you looking for? e.g. "dentists in London"'
+                aria-label="Optional search filter"
+                placeholder='Optional: filter by type — "restaurants", "dentists", "hotels"...'
                 className="w-full h-10 pl-10 pr-4 bg-white/[0.04] border border-white/[0.06] rounded-lg text-[14px] text-white placeholder-[hsl(215,16%,40%)] focus:outline-none focus:border-blue-500/40 focus:bg-white/[0.06] transition-all"
               />
             </div>
 
-            {/* Search button */}
-            <button
-              onClick={handleSearch}
-              disabled={searching || !query.trim()}
-              aria-label="Find leads"
-              className="h-10 px-5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:from-[hsl(223,47%,11%)] disabled:to-[hsl(223,47%,11%)] disabled:text-[hsl(215,16%,35%)] text-white rounded-lg text-[13px] font-medium transition-all flex items-center gap-2 shrink-0"
+            {/* Lead count selector */}
+            <select
+              value={maxResults}
+              onChange={(e) => setMaxResults(Number(e.target.value))}
+              className="h-10 px-3 bg-white/[0.04] border border-white/[0.06] rounded-lg text-[13px] text-white appearance-none cursor-pointer"
             >
-              {searching ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Searching
-                </>
-              ) : (
-                <>
-                  <Zap className="w-4 h-4" />
-                  Find Leads
-                </>
-              )}
-            </button>
+              {LEAD_COUNTS.map((n) => (
+                <option key={n} value={n} className="bg-[#1a1a2e]">{n} leads</option>
+              ))}
+            </select>
 
             {/* Filters button */}
             {hasSearched && (
               <button
                 onClick={() => setFiltersOpen(!filtersOpen)}
-                aria-label="Toggle filters"
-                aria-expanded={filtersOpen}
                 className={`h-10 px-3 rounded-lg text-[13px] font-medium transition-all flex items-center gap-2 shrink-0 border ${
                   filtersOpen || activeFilterCount > 0
                     ? 'bg-blue-500/10 border-blue-500/20 text-blue-400'
@@ -319,74 +259,17 @@ export default function SearchPage() {
             )}
           </div>
 
-          {/* Lead count presets */}
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-[11px] text-[hsl(215,16%,35%)] shrink-0">How many?</span>
-            {LEAD_COUNTS.map((n) => (
-              <button
-                key={n}
-                onClick={() => { setMaxResults(n); setShowCustomInput(false); }}
-                className={`h-7 px-2.5 rounded-md text-[11px] font-medium transition-all border ${
-                  !showCustomInput && maxResults === n
-                    ? 'bg-blue-500/10 border-blue-500/20 text-blue-400'
-                    : 'bg-white/[0.02] border-white/[0.04] text-[hsl(215,16%,40%)] hover:text-white hover:bg-white/[0.06]'
-                }`}
-              >
-                {n}
+          {/* Active search info */}
+          {hasSearched && searchArea && (
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-[11px] text-[hsl(215,16%,35%)] flex items-center gap-1">
+                <MapPin className="w-3 h-3 text-blue-400" />
+                Area: {searchArea.lat.toFixed(3)}, {searchArea.lng.toFixed(3)} · {searchArea.radiusKm.toFixed(1)} km
+                {query && <> · &quot;{query}&quot;</>}
+              </span>
+              <button onClick={() => { setHasSearched(false); setResults([]); setSearchArea(null); setSelectedResult(null); }} className="text-[11px] text-red-400 hover:text-red-300">
+                Clear
               </button>
-            ))}
-            <button
-              onClick={() => setShowCustomInput(!showCustomInput)}
-              className={`h-7 px-2.5 rounded-md text-[11px] font-medium transition-all border ${
-                showCustomInput
-                  ? 'bg-blue-500/10 border-blue-500/20 text-blue-400'
-                  : 'bg-white/[0.02] border-white/[0.04] text-[hsl(215,16%,40%)] hover:text-white hover:bg-white/[0.06]'
-              }`}
-            >
-              Custom
-            </button>
-            {showCustomInput && (
-              <input
-                type="number"
-                min="1"
-                max="1000"
-                value={customCount}
-                onChange={(e) => setCustomCount(e.target.value)}
-                placeholder="1-1000"
-                className="h-7 w-20 px-2 bg-white/[0.04] border border-white/[0.06] rounded-md text-[11px] text-white placeholder-[hsl(215,16%,40%)] focus:outline-none focus:border-blue-500/40"
-              />
-            )}
-          </div>
-
-          {/* Examples row - only show when no search */}
-          {!hasSearched && (
-            <div className="flex items-center gap-2 mt-2 overflow-x-auto scrollbar-thin pb-1">
-              <span className="text-[11px] text-[hsl(215,16%,35%)] shrink-0">Try:</span>
-              {EXAMPLES.map((ex) => (
-                <button
-                  key={ex}
-                  onClick={() => setQuery(ex)}
-                  className="shrink-0 px-2.5 py-1 bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.04] rounded-md text-[12px] text-[hsl(215,20%,55%)] hover:text-white transition-all"
-                >
-                  {ex}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Recent searches */}
-          {!hasSearched && recentSearches.length > 0 && (
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="text-[11px] text-[hsl(215,16%,28%)] shrink-0">Recent:</span>
-              {recentSearches.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setQuery(s)}
-                  className="text-[12px] text-[hsl(215,16%,35%)] hover:text-[hsl(215,20%,60%)] transition-colors"
-                >
-                  {s}
-                </button>
-              ))}
             </div>
           )}
         </div>
@@ -400,12 +283,10 @@ export default function SearchPage() {
             <div className="w-[260px] shrink-0 border-r border-white/[0.04] bg-[hsl(224,71%,4%)] overflow-y-auto scrollbar-thin p-4 space-y-4 animate-slide-in">
               <div className="flex items-center justify-between">
                 <h3 className="text-[13px] font-semibold text-white">Filters</h3>
-                <button onClick={() => setFiltersOpen(false)} aria-label="Close filters" className="text-[hsl(215,16%,40%)] hover:text-white">
+                <button onClick={() => setFiltersOpen(false)} className="text-[hsl(215,16%,40%)] hover:text-white">
                   <X className="w-4 h-4" />
                 </button>
               </div>
-
-              {/* Temperature */}
               <div>
                 <p className="text-[11px] font-medium text-[hsl(215,16%,50%)] uppercase tracking-wider mb-2">Lead Temperature</p>
                 <div className="flex gap-1">
@@ -429,8 +310,6 @@ export default function SearchPage() {
                   ))}
                 </div>
               </div>
-
-              {/* Website */}
               <div className="space-y-2">
                 <p className="text-[11px] font-medium text-[hsl(215,16%,50%)] uppercase tracking-wider">Website</p>
                 <label className="flex items-center gap-2.5 cursor-pointer group py-0.5">
@@ -442,8 +321,6 @@ export default function SearchPage() {
                   <span className="text-[12px] text-[hsl(215,20%,55%)] group-hover:text-white">No website (needs one)</span>
                 </label>
               </div>
-
-              {/* Contact */}
               <div className="space-y-2">
                 <p className="text-[11px] font-medium text-[hsl(215,16%,50%)] uppercase tracking-wider">Contact Info</p>
                 {[
@@ -458,7 +335,6 @@ export default function SearchPage() {
                   </label>
                 ))}
               </div>
-
               {activeFilterCount > 0 && (
                 <button
                   onClick={() => setFilters({ temperature: 'all', hasWebsite: false, noWebsite: false, hasEmail: false, hasPhone: false, hasSocial: false })}
@@ -478,14 +354,14 @@ export default function SearchPage() {
               hoveredId={hoveredId}
               onSelectResult={setSelectedResult}
               area={searchArea}
-              onAreaSelected={setSearchArea}
-              onClearArea={() => setSearchArea(null)}
+              onAreaSelected={handleAreaSelected}
+              onClearArea={() => { setSearchArea(null); setResults([]); setHasSearched(false); setSelectedResult(null); }}
             />
 
             {searchArea && (
               <div className="absolute bottom-3 left-3 z-10 px-3 py-1.5 rounded-lg text-[11px] text-white bg-blue-600/90 border border-blue-400/30 backdrop-blur">
                 <MapPin className="w-3 h-3 inline mr-1" />
-                Searching within {Math.max(1, Math.round(searchArea.radiusKm))} km
+                {searchArea.radiusKm.toFixed(1)} km radius
               </div>
             )}
 
@@ -549,7 +425,7 @@ export default function SearchPage() {
                 <div>
                   <Building2 className="w-10 h-10 text-[hsl(215,16%,25%)] mx-auto mb-3" />
                   <p className="text-[14px] text-[hsl(215,16%,40%)]">
-                    {searching ? 'Searching for companies...' : 'No results match your filters'}
+                    {searching ? 'Discovering businesses...' : 'No results match your filters'}
                   </p>
                 </div>
               </div>
@@ -557,31 +433,45 @@ export default function SearchPage() {
           </div>
         </div>
       ) : (
-        /* Landing / empty state */
-        <div className="flex-1 flex items-center justify-center">
-          <div className="max-w-lg text-center px-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center mx-auto mb-6">
-              <Globe className="w-8 h-8 text-blue-400" />
-            </div>
-            <h2 className="text-2xl font-bold text-white mb-2">
-              Find any business <span className="gradient-text">worldwide</span>
-            </h2>
-            <p className="text-[14px] text-[hsl(215,20%,50%)] mb-6">
-              Search 195+ countries. Discover companies, enrich data with AI, and generate leads — all in one place.
-            </p>
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div className="glass-card rounded-xl p-4">
-                <Globe className="w-5 h-5 text-blue-400 mx-auto mb-2" />
-                <p className="text-[12px] text-[hsl(215,20%,55%)]">195+ Countries</p>
+        /* Landing / empty state — draw area to start */
+        <div className="flex-1 relative">
+          <SearchMap
+            results={[]}
+            selectedResult={null}
+            hoveredId={null}
+            onSelectResult={() => {}}
+            area={null}
+            onAreaSelected={handleAreaSelected}
+            onClearArea={() => {}}
+          />
+
+          {/* Landing overlay */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+            <div className="max-w-lg text-center px-4 pointer-events-auto">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center mx-auto mb-6">
+                <Radar className="w-8 h-8 text-blue-400" />
               </div>
-              <div className="glass-card rounded-xl p-4">
-                <Zap className="w-5 h-5 text-purple-400 mx-auto mb-2" />
-                <p className="text-[12px] text-[hsl(215,20%,55%)]">19 Free Providers</p>
+              <h2 className="text-2xl font-bold text-white mb-2">
+                Draw an area to <span className="text-blue-400">discover leads</span>
+              </h2>
+              <p className="text-[14px] text-[hsl(215,20%,50%)] mb-4">
+                Click <strong>&quot;Search area&quot;</strong> on the map, then click twice to set a center and radius. Works anywhere in the world.
+              </p>
+              <div className="grid grid-cols-3 gap-3 text-center mb-4">
+                <div className="glass-card rounded-xl p-3">
+                  <Globe className="w-5 h-5 text-blue-400 mx-auto mb-1" />
+                  <p className="text-[11px] text-[hsl(215,20%,55%)]">Google Maps</p>
+                </div>
+                <div className="glass-card rounded-xl p-3">
+                  <Zap className="w-5 h-5 text-purple-400 mx-auto mb-1" />
+                  <p className="text-[11px] text-[hsl(215,20%,55%)]">AI Scoring</p>
+                </div>
+                <div className="glass-card rounded-xl p-3">
+                  <Star className="w-5 h-5 text-green-400 mx-auto mb-1" />
+                  <p className="text-[11px] text-[hsl(215,20%,55%)]">Auto Enrich</p>
+                </div>
               </div>
-              <div className="glass-card rounded-xl p-4">
-                <Star className="w-5 h-5 text-green-400 mx-auto mb-2" />
-                <p className="text-[12px] text-[hsl(215,20%,55%)]">AI Scoring</p>
-              </div>
+              <p className="text-[12px] text-[hsl(215,16%,35%)]">195+ countries — find any business anywhere</p>
             </div>
           </div>
         </div>

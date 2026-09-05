@@ -203,6 +203,9 @@ class TaskHandler(BaseHTTPRequestHandler):
                             company_name=company_data["name"],
                             industry=company_data["industry"],
                             issues=issues,
+                            city=company_data["city"],
+                            rating=company_data["rating"],
+                            has_website=bool(company_data["website"]),
                         ))
                     elif channel == "linkedin":
                         result = asyncio.run(sales_assistant.generate_linkedin_message(

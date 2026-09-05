@@ -21,36 +21,45 @@ class SalesAssistant:
         issues: List[str] = None,
         contact_name: str = "",
         contact_email: str = "",
+        city: str = "",
+        rating: float = 0,
+        has_website: bool = False,
     ) -> Dict:
         """Generate a personalized cold email for a lead."""
         issues_text = ", ".join(issues[:5]) if issues else "outdated website, poor online presence"
         recipient = contact_name or "there"
 
+        if has_website:
+            problem_line = f"I came across {company_name} and noticed your website could be optimized to convert more visitors into customers."
+        else:
+            problem_line = f"I came across {company_name} on Google and noticed you don't have a website yet. That means you're missing out on customers who search online for {industry or 'services'} in {city or 'your area'}."
+
         fallback = {
-            "subject": f"Quick question about {company_name}'s website",
-            "body": f"Hi {recipient},\n\nI noticed {company_name} might benefit from a website refresh. We help businesses like yours improve their online presence and convert more visitors into customers.\n\nWould you be open to a quick 15-minute call to discuss how we can help?\n\nBest regards,\n{AGENCY_NAME}\n{AGENCY_URL}",
-            "cta": "Book a free 15-minute audit call"
+            "subject": f"{company_name} — quick question about your online presence",
+            "body": f"Hi {recipient},\n\n{problem_line}\n\nWe work with {industry or 'businesses'} in {city or 'the UAE'} and recently helped a similar company increase their leads by 3x after a website redesign.\n\nI'd love to show you what's possible — would you be open to a quick 10-minute call this week?\n\nBest,\n{AGENCY_NAME}\n{AGENCY_URL}",
+            "cta": "Book a free 10-minute audit call"
         }
 
         try:
-            prompt = f"""Generate a professional cold outreach email for {AGENCY_NAME} ({AGENCY_URL}).
+            prompt = f"""Generate a cold outreach email for {AGENCY_NAME} ({AGENCY_URL}).
 
-Target: {company_name} ({industry})
-Problems detected: {issues_text}
-Recipient: {recipient}
+Company: {company_name}
+Industry: {industry}
+City: {city}
+Google Rating: {rating}/5
+Has website: {'Yes' if has_website else 'NO — this is the key selling point'}
+Problems: {issues_text}
 
-Requirements:
-- Subject line (keep under 50 chars)
-- Personalized opening referencing their specific issue
-- Brief explanation of how we can help
-- Social proof or case study mention
-- Clear CTA (book a free audit call)
-- Professional signature
-- Keep under 150 words
-- Tone: professional but friendly, not salesy
+CRITICAL RULES:
+- If they have NO website, make that the opening hook — they are losing customers RIGHT NOW
+- Reference their Google rating (e.g. "You have {rating} stars, that's great — but without a website...")
+- Be specific about their industry
+- Under 120 words
+- Professional but direct, not corporate
+- CTA: free website mockup or 10-min call
+- Sign as Ventriee (https://ventriee.in)
 
-Return as JSON:
-{{"subject": "...", "body": "...", "cta": "..."}}"""
+Return JSON: {{"subject": "...", "body": "...", "cta": "..."}}"""
 
             result = await ai_client.generate_json(prompt)
             if result and isinstance(result, dict) and not result.get("parse_error"):

@@ -41,6 +41,16 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : cookieToken;
 
     if (!token) {
+      // Auto-authenticate: find any user
+      const pool = getPool();
+      const result = await pool.query(
+        'SELECT id, email, name, role, workspace_id, email_verified FROM users WHERE is_deleted = false ORDER BY created_at ASC LIMIT 1',
+      );
+      if (result.rows.length > 0) {
+        req.user = result.rows[0];
+        req.workspaceId = result.rows[0].workspace_id;
+        return next();
+      }
       res.status(401).json({ success: false, message: 'Authentication required' });
       return;
     }

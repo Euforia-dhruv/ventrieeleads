@@ -9,10 +9,10 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-AI_PROVIDER = os.getenv("AI_PRIMARY_PROVIDER", os.getenv("AI_PROVIDER", "gemini"))
-AI_MODEL = os.getenv("AI_MODEL", "")
+AI_PROVIDER = os.getenv("AI_PRIMARY_PROVIDER", os.getenv("AI_PROVIDER", "openai"))
+AI_MODEL = os.getenv("AI_MODEL", "auto/best-chat")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "http://host.docker.internal:20128/v1")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "")
@@ -27,7 +27,7 @@ SYSTEM_PROMPT_DEFAULT = (
 class AIClient:
     """Multi-provider AI client with automatic fallback chain."""
 
-    PROVIDER_ORDER = ["gemini", "openai", "anthropic", "ollama"]
+    PROVIDER_ORDER = ["openai", "gemini", "anthropic", "ollama"]
     _rate_limit_until: float = 0
 
     def __init__(self):

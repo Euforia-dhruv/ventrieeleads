@@ -16,7 +16,14 @@ interface Lead {
   phone?: string;
   email?: string;
   website?: string;
+  company_phone?: string;
+  company_email?: string;
+  company_website?: string;
+  logo_url?: string;
+  rating?: number;
+  review_count?: number;
   created_at: string;
+  company_id?: string;
 }
 
 const STATUS_OPTIONS = [
@@ -47,7 +54,7 @@ export default function LeadsPage() {
   const fetchLeads = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ limit: '100', sortBy, sortOrder });
+      const params = new URLSearchParams({ limit: '100', sortBy, sortOrder, has_website: 'false' });
       if (statusFilter !== 'All') params.set('status', statusFilter);
       const res = await fetch(`/api/leads?${params}`);
       const data = await res.json();
@@ -204,7 +211,7 @@ export default function LeadsPage() {
                   <p className="text-[13px] font-medium text-white truncate group-hover:text-blue-400 transition-colors">
                     {lead.company_name}
                   </p>
-                  {lead.website && <p className="text-[10px] text-[hsl(215,16%,35%)] truncate">{lead.website}</p>}
+                  {(lead.company_website || lead.website) && <p className="text-[10px] text-[hsl(215,16%,35%)] truncate">{lead.company_website || lead.website}</p>}
                 </div>
               </div>
 
@@ -231,9 +238,9 @@ export default function LeadsPage() {
 
               {/* Contact */}
               <div className="flex items-center gap-1.5">
-                {lead.phone && <Phone className="w-3 h-3 text-[hsl(215,16%,40%)]" />}
-                {lead.email && <Mail className="w-3 h-3 text-[hsl(215,16%,40%)]" />}
-                {lead.website && <Globe className="w-3 h-3 text-[hsl(215,16%,40%)]" />}
+                {(lead.company_phone || lead.phone) && <Phone className="w-3 h-3 text-green-400" />}
+                {(lead.company_email || lead.email) && <Mail className="w-3 h-3 text-blue-400" />}
+                {(lead.company_website || lead.website) && <Globe className="w-3 h-3 text-purple-400" />}
               </div>
 
               {/* Actions */}

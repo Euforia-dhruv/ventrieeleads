@@ -124,14 +124,14 @@ export default function SearchMap({
           sources: {
             osm: {
               type: 'raster',
-              tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+              tiles: [`${typeof window !== 'undefined' ? window.location.origin : ''}/osm-tiles/{z}/{x}/{y}.png`],
               tileSize: 256,
-              attribution: '&copy; OpenStreetMap contributors',
+              attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             },
           },
           layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
         },
-        center: [20, 25],
+        center: [30, 20],
         zoom: 2,
         pitch: 0,
         attributionControl: false,
@@ -139,6 +139,7 @@ export default function SearchMap({
 
       map.addControl(new maplibregl.NavigationControl(), 'top-right');
       map.addControl(new maplibregl.ScaleControl(), 'bottom-right');
+      map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
 
       map.on('load', () => {
         if (cancelled) return;
@@ -317,12 +318,15 @@ export default function SearchMap({
       if (!clusterSource || !heatSource) return;
 
       const validResults = results.filter((r) => r.latitude && r.longitude);
-      const clusterFeatures: Feature<Point>[] = validResults.map((c, i) => ({
-        type: 'Feature',
-        id: i,
-        properties: { score: Math.round(c.lead_score || c.opportunity_score || 0), idx: i },
-        geometry: { type: 'Point', coordinates: [c.longitude as number, c.latitude as number] },
-      }));
+      const clusterFeatures: Feature<Point>[] = validResults.map((c) => {
+        const originalIdx = results.indexOf(c);
+        return {
+          type: 'Feature',
+          id: originalIdx,
+          properties: { score: Math.round(c.lead_score || c.opportunity_score || 0), idx: originalIdx },
+          geometry: { type: 'Point', coordinates: [c.longitude as number, c.latitude as number] },
+        };
+      });
       const heatFeatures: Feature<Point>[] = validResults.map((c) => ({
         type: 'Feature',
         properties: { weight: Math.max(1, c.review_count || 1) },

@@ -19,4 +19,14 @@ asyncpg==0.30.0
 
 # Scraping tools
 scrapling>=0.3.0
-instascrape>=1.0.0
+dnspython>=2.4.0
+
+# AI-powered scraping (ScrapeGraphAI)
+scrapegraphai>=1.0.0
+
+# Scalable crawling (Scrapy)
+scrapy>=2.11.0
+scrapy-redis>=0.7.3
+
+# Email verification helpers
+py3-validate-email>=1.0.0

@@ -55,8 +55,8 @@ export async function createSearchJob(req: Request, res: Response): Promise<void
 
     const result = await pool.query(
       `
-      INSERT INTO search_jobs (id, query, country, city, area, industry, keyword, min_rating, min_reviews, max_results, status, metadata, requested_count, progress_stage)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'queued', $11::jsonb, $12, 'queued')
+      INSERT INTO search_jobs (id, query, country, city, area, industry, keyword, min_rating, min_reviews, max_results, status, metadata)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'queued', $11::jsonb)
       RETURNING *
     `,
       [
@@ -71,7 +71,6 @@ export async function createSearchJob(req: Request, res: Response): Promise<void
         min_reviews,
         clampedMax,
         JSON.stringify(metadata),
-        clampedMax,
       ],
     );
 
@@ -106,18 +105,12 @@ export async function createSearchJob(req: Request, res: Response): Promise<void
         status: job.status,
         progress: job.progress,
         results_count: job.results_count,
-        requested_count: job.requested_count || clampedMax,
-        discovered_count: job.discovered_count || 0,
-        processed_count: job.processed_count || 0,
-        qualified_count: job.qualified_count || 0,
-        failed_count: job.failed_count || 0,
-        progress_stage: job.progress_stage || 'queued',
+        task_enqueued: taskEnqueued,
         created_at: job.created_at,
         lat: metadata.lat ?? null,
         lng: metadata.lng ?? null,
         radius_km: metadata.radius_km ?? null,
         search_area: metadata.search_area ?? null,
-        task_enqueued: taskEnqueued,
       },
     });
   } catch (error) {

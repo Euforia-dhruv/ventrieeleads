@@ -119,8 +119,9 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - OLLAMA_URL=http://host.docker.internal:11434
-      - AI_PRIMARY_PROVIDER=${AI_PRIMARY_PROVIDER:-gemini}
-      - AI_MODEL=${AI_MODEL:-}
+      - AI_PRIMARY_PROVIDER=${AI_PRIMARY_PROVIDER:-openai}
+      - AI_MODEL=${AI_MODEL:-auto/best-chat}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://host.docker.internal:20128/v1}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -182,8 +183,9 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - OLLAMA_URL=http://host.docker.internal:11434
-      - AI_PRIMARY_PROVIDER=${AI_PRIMARY_PROVIDER:-gemini}
-      - AI_MODEL=${AI_MODEL:-}
+      - AI_PRIMARY_PROVIDER=${AI_PRIMARY_PROVIDER:-openai}
+      - AI_MODEL=${AI_MODEL:-auto/best-chat}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://host.docker.internal:20128/v1}
       # Provider API Keys (Free tiers)
       - OUTSCRAPER_API_KEY=${OUTSCRAPER_API_KEY}
       - APOLLO_API_KEY=${APOLLO_API_KEY}
@@ -193,10 +195,17 @@ services:
       - WAPPALYZER_API_KEY=${WAPPALYZER_API_KEY}
       - CALENDLY_API_KEY=${CALENDLY_API_KEY}
       - LOOM_API_KEY=${LOOM_API_KEY}
+      # Scout social media scrapers
+      - LINKEDIN_COOKIE=${LINKEDIN_COOKIE}
+      - SCOUT_PROXY=${SCOUT_PROXY}
+      - SCOUT_PROXY_FILE=${SCOUT_PROXY_FILE}
+      - SCOUT_FREE_PROXY=${SCOUT_FREE_PROXY}
       # Browser
       - LIGHTPANDA_URL=${LIGHTPANDA_URL:-http://lightpanda:8080}
       - LIGHTPANDA_CDP_URL=${LIGHTPANDA_CDP_URL:-ws://lightpanda:9222}
       - BROWSER_FALLBACK_CHAIN=${BROWSER_FALLBACK_CHAIN:-lightpanda,playwright,http}
+      # Email verification
+      - EMAIL_VERIFIER_URL=http://email-verifier:8080
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -206,8 +215,6 @@ services:
         condition: service_healthy
       lightpanda:
         condition: service_started
-    volumes:
-      - leads-data:/app/data
     restart: unless-stopped
     stop_grace_period: 30s
     deploy:
@@ -234,8 +241,9 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - OLLAMA_URL=http://host.docker.internal:11434
-      - AI_PRIMARY_PROVIDER=${AI_PRIMARY_PROVIDER:-gemini}
-      - AI_MODEL=${AI_MODEL:-}
+      - AI_PRIMARY_PROVIDER=${AI_PRIMARY_PROVIDER:-openai}
+      - AI_MODEL=${AI_MODEL:-auto/best-chat}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://host.docker.internal:20128/v1}
       - AI_FALLBACK_ENABLED=${AI_FALLBACK_ENABLED:-true}
       - LOG_LEVEL=info
       - TIMEZONE=${TIMEZONE:-UTC}
@@ -248,6 +256,11 @@ services:
       - WAPPALYZER_API_KEY=${WAPPALYZER_API_KEY}
       - CALENDLY_API_KEY=${CALENDLY_API_KEY}
       - LOOM_API_KEY=${LOOM_API_KEY}
+      # Scout social media scrapers
+      - LINKEDIN_COOKIE=${LINKEDIN_COOKIE}
+      - SCOUT_PROXY=${SCOUT_PROXY}
+      - SCOUT_PROXY_FILE=${SCOUT_PROXY_FILE}
+      - SCOUT_FREE_PROXY=${SCOUT_FREE_PROXY}
       # Browser
       - LIGHTPANDA_URL=${LIGHTPANDA_URL:-http://lightpanda:8080}
       - LIGHTPANDA_CDP_URL=${LIGHTPANDA_CDP_URL:-ws://lightpanda:9222}
@@ -287,8 +300,9 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - OLLAMA_URL=http://host.docker.internal:11434
-      - AI_PRIMARY_PROVIDER=${AI_PRIMARY_PROVIDER:-gemini}
-      - AI_MODEL=${AI_MODEL:-}
+      - AI_PRIMARY_PROVIDER=${AI_PRIMARY_PROVIDER:-openai}
+      - AI_MODEL=${AI_MODEL:-auto/best-chat}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://host.docker.internal:20128/v1}
       - AI_FALLBACK_ENABLED=${AI_FALLBACK_ENABLED:-true}
       - LOG_LEVEL=info
       - TIMEZONE=${TIMEZONE:-UTC}
@@ -429,6 +443,31 @@ services:
         limits:
           memory: 512M
           cpus: "1.0"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  email-verifier:
+    image: reacherhq/backend:latest
+    expose:
+      - "8080"
+    environment:
+      - RCH_header_apikey=${RCH_HEADER_APIKEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    stop_grace_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
     logging:
       driver: json-file
       options:

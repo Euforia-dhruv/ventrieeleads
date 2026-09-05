@@ -1,4 +1,4 @@
-"""Website scraper for extracting contact info and social links — Scrapling-first with httpx fallback."""
+"""Website scraper for extracting contact info and social links — Scrapling-first with httpx fallback, AI enrichment, email verification."""
 import re
 import logging
 from typing import Dict, List, Optional
@@ -10,7 +10,10 @@ logger = logging.getLogger(__name__)
 
 
 class WebsiteScraper:
-    """Scrape company websites for contact information using Scrapling (primary) or httpx (fallback)."""
+    """Scrape company websites for contact information.
+
+    Pipeline: Scrapling → httpx fallback → AI enrichment (ScrapeGraphAI/OmniRoute) → Email verification.
+    """
 
     def __init__(self):
         self.timeout = 15
@@ -131,6 +134,41 @@ class WebsiteScraper:
 
         except Exception as e:
             logger.error(f"Failed to scrape {url}: {e}")
+
+        # ── Tier 3: AI enrichment (ScrapeGraphAI / OmniRoute) ──
+        if not result["emails"] and not result["phone_numbers"]:
+            try:
+                from worker.services.ai_scraper import ai_scraper
+                ai_data = await ai_scraper.extract_contacts(url)
+                if ai_data:
+                    result["emails"] = list(set(result["emails"] + ai_data.get("emails", [])))
+                    result["phone_numbers"] = list(set(result["phone_numbers"] + ai_data.get("phones", [])))
+                    if not result["whatsapp"] and ai_data.get("whatsapp"):
+                        result["whatsapp"] = ai_data["whatsapp"]
+                    if not result["description"] and ai_data.get("description"):
+                        result["description"] = ai_data["description"]
+                    for platform in ["instagram", "facebook", "linkedin", "twitter"]:
+                        if not result.get(platform) and ai_data.get("social_links", {}).get(platform):
+                            result[platform] = ai_data["social_links"][platform]
+                    if ai_data.get("services"):
+                        result["services"] = ai_data["services"]
+                    logger.info(f"AI enriched {url}: {len(result['emails'])} emails, {len(result['phone_numbers'])} phones")
+            except Exception as e:
+                logger.debug(f"AI enrichment failed for {url}: {e}")
+
+        # ── Tier 4: Email verification ──
+        if result["emails"]:
+            try:
+                from worker.services.email_verifier import email_verifier
+                verified = await email_verifier.verify_batch(result["emails"][:5])
+                valid_emails = [v["email"] for v in verified if v.get("is_valid")]
+                if valid_emails:
+                    result["emails"] = valid_emails
+                else:
+                    result["emails"] = result["emails"][:1]
+                result["email_verification"] = verified
+            except Exception as e:
+                logger.debug(f"Email verification failed: {e}")
 
         return result
 

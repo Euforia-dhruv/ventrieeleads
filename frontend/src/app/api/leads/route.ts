@@ -2,14 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const API_BASE = process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+function getAuthHeaders(request: NextRequest): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = request.cookies.get('token')?.value;
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const query = searchParams.toString();
+    const headers = getAuthHeaders(request);
 
-    const res = await fetch(`${API_BASE}/api/leads?${query}`, { cache: 'no-store' });
+    const res = await fetch(`${API_BASE}/api/leads?${query}`, { headers, cache: 'no-store' });
     const data = await res.json();
-    return NextResponse.json(data);
+    return NextResponse.json(data, { status: res.status });
   } catch {
     return NextResponse.json({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, pages: 0 } });
   }
@@ -18,9 +26,10 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const headers = getAuthHeaders(request);
     const res = await fetch(`${API_BASE}/api/leads`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
     });
     const data = await res.json();

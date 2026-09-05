@@ -64,7 +64,7 @@ const generalLimiter = rateLimit({
 
 const searchLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 10,
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Search rate limit exceeded.' },

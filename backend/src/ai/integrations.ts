@@ -21,10 +21,10 @@ class AIIntegration {
 
   constructor() {
     this.settings = {
-      provider: (process.env.AI_PROVIDER as AISettings['provider']) || 'ollama',
-      model: process.env.AI_MODEL || 'llama3',
+      provider: (process.env.AI_PROVIDER as AISettings['provider']) || 'openai',
+      model: process.env.AI_MODEL || 'auto/best-chat',
       apiKey: process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || '',
-      baseUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
+      baseUrl: process.env.OPENAI_BASE_URL || 'http://localhost:20128/v1',
       temperature: 0.7,
       maxTokens: 4096,
     };
